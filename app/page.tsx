@@ -755,16 +755,18 @@ function NewProjectModal({data,setData,employees,onClose,onCreate}:{data:NewProj
 }
 
 function MyTaskList({items,projects,onOpen}:{items:Array<{key:string;id:number;project_id:number;container_id:number|null;title:string;due_date:string|null;assignee_id:number|null;status:string;source:'策略'|'執行'}>;projects:Project[];onOpen:(t:{id:number;project_id:number;container_id:number|null;source:'策略'|'執行'})=>void}) {
+  const [expanded,setExpanded]=useState(false)
+  const visibleItems=expanded?items:items.slice(0,6)
   return <div style={{marginTop:18,paddingTop:16,borderTop:'1px solid #e5e7eb'}}>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}><b>我的任務（{items.length}）</b><small style={{color:'#6b7280'}}>依截止日排序・點擊直接編輯</small></div>
     {!items.length?<div style={{padding:'14px 0',color:'#6b7280'}}>目前沒有未完成的指派任務。</div>:<div style={{display:'grid',gap:8}}>
-      {items.slice(0,30).map(t=>{const project=projects.find(p=>p.id===t.project_id);return <button key={t.key} onClick={()=>onOpen(t)} style={{width:'100%',textAlign:'left',border:'1px solid #e5e7eb',background:'#fff',borderRadius:10,padding:'10px 12px',cursor:'pointer',display:'grid',gridTemplateColumns:'minmax(110px,0.8fr) minmax(180px,1.6fr) 90px 76px',gap:10,alignItems:'center'}}>
+      {visibleItems.map(t=>{const project=projects.find(p=>p.id===t.project_id);return <button key={t.key} onClick={()=>onOpen(t)} style={{width:'100%',textAlign:'left',border:'1px solid #e5e7eb',background:'#fff',borderRadius:10,padding:'10px 12px',cursor:'pointer',display:'grid',gridTemplateColumns:'minmax(110px,0.8fr) minmax(180px,1.6fr) 90px 76px',gap:10,alignItems:'center'}}>
         <span className="project-tag">{project?.name||'未知專案'}</span>
         <span><b>{t.title}</b><small style={{display:'block',color:'#6b7280',marginTop:2}}>{t.source}</small></span>
         <span style={{fontSize:13}}>{t.due_date||'未設定'}</span>
         <StatusPill text={t.status}/>
       </button>})}
-      {items.length>30&&<small style={{color:'#6b7280'}}>目前顯示前 30 項，共 {items.length} 項。</small>}
+      {items.length>6&&<button type="button" className="btn" onClick={()=>setExpanded(v=>!v)} style={{justifySelf:'center',marginTop:4}}>{expanded?'收起':`展開全部（共 ${items.length} 個）`}</button>}
     </div>}
   </div>
 }
