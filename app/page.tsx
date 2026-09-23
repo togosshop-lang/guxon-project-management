@@ -100,6 +100,7 @@ export default function Home() {
   const [assigneeFilter, setAssigneeFilter] = useState('全部')
   const [attentionProjectFilter, setAttentionProjectFilter] = useState('全部')
   const [showNewProject, setShowNewProject] = useState(false)
+  const [editingDashboardTask, setEditingDashboardTask] = useState<{source:'策略'|'執行';id:number}|null>(null)
   const [focusTask, setFocusTask] = useState<{source:'策略'|'執行';id:number;project_id:number;container_id:number|null}|null>(null)
   const [newProject, setNewProject] = useState<NewProjectForm>({
     name:'', version:'v1.0', owner_id:'', launch_date:'', retail_price:'', group_price:'',
@@ -574,7 +575,7 @@ export default function Home() {
     <section className="dashboard-grid">
       <div className="panel"><div className="panel-head"><b>需要關注</b><div className="attention-filters"><select value={attentionProjectFilter} onChange={e=>setAttentionProjectFilter(e.target.value)}><option value="全部">全部專案</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>{isManager?<select value={assigneeFilter} onChange={e=>setAssigneeFilter(e.target.value)}><option value="全部">全部員工</option>{employees.filter(e=>e.active).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select>:<span className="viewer-chip">我的任務：{currentEmployee?.name||'目前帳號'}</span>}</div></div>
         <Attention title="逾期" items={overdue} employees={employees} projects={projects}/><Attention title="7 天內到期" items={dueSoon} employees={employees} projects={projects}/><Attention title="卡關" items={blocked} employees={employees} projects={projects}/>
-        <MyTaskList items={myTasks} projects={projects} onOpen={openDashboardTask}/>
+        <MyTaskList items={myTasks} projects={projects} onOpen={t=>setEditingDashboardTask({source:t.source,id:t.id})}/>
       </div>
       <div className="panel"><div className="panel-head"><b>整體任務</b></div><div className="summary-list"><span>完成 <b>{dashboardItems.filter(t=>isDone(t.status)).length}</b></span><span>進行中 <b>{dashboardItems.filter(t=>t.status==='進行中').length}</b></span><span>待審 <b>{dashboardItems.filter(t=>t.status==='待審').length}</b></span><span>未開始 <b>{dashboardItems.filter(t=>t.status==='未開始').length}</b></span></div></div>
     </section>
@@ -586,6 +587,7 @@ export default function Home() {
       return <button key={p.id} className={`project-card ${is1688?'project-card-1688':''}`} onClick={()=>{setSelectedProjectId(p.id);const first=stages.find(s=>s.project_id===p.id)?.id;if(first)setExpanded({[first]:true})}}><div className="project-top"><div><div className="project-heading-line"><h2>{p.name}</h2><span className={`kind-badge ${is1688?'kind-1688':'kind-brand'}`}>{is1688?'1688 新品':'品牌新品'}</span></div><p>{p.version||'-'} ・ 負責：{owner}</p></div><StatusPill text={p.status||'未設定'}/></div><div className="project-meta"><span>上市日 <b>{p.launch_date||'-'}</b></span><span>正式價 <b>NT$ {p.retail_price??'-'}</b></span><span>團購價 <b>NT$ {p.group_price??'-'}</b></span><span>{is1688?'簡易工作':'執行工作'} <b>{is1688?`${pt.filter(t=>isDone(t.status)).length}/${pt.length}`:`${et.filter(t=>isDone(t.status)).length}/${et.filter(t=>countsInExecutionProgress(t.status)).length}`}</b></span></div>{is1688?<div className="single-progress"><span>1688 上架進度 <b>{pct}%</b></span><div className="progress"><i style={{width:`${pct}%`}}/></div></div>:<div className="dual-progress"><div><span>策略管理 <b>{pct}%</b></span><div className="progress"><i style={{width:`${pct}%`}}/></div></div><div><span>執行管理 <b>{et.length?`${ep}%`:'尚未建立'}</b></span><div className="progress execution-progress"><i style={{width:`${ep}%`}}/></div></div></div>}</button>
     })}{!filteredProjects.length&&<div className="empty">目前沒有符合條件的專案</div>}</div>
     {showNewProject&&<NewProjectModal data={newProject} setData={setNewProject} employees={employees} onClose={()=>setShowNewProject(false)} onCreate={createProject}/>} 
+    {editingDashboardTask&&<DashboardTaskModal source={editingDashboardTask.source} task={editingDashboardTask.source==='策略'?tasks.find(t=>t.id===editingDashboardTask.id)||null:executionTasks.find(t=>t.id===editingDashboardTask.id)||null} projects={projects} employees={employees} onClose={()=>setEditingDashboardTask(null)} onUpdateTask={updateTask} onUpdateExecutionTask={updateExecutionTask} onOpenProject={(projectId,containerId,source,id)=>{setEditingDashboardTask(null);openDashboardTask({project_id:projectId,container_id:containerId,source,id})}}/>}
   </div></main>
 }
 
@@ -754,7 +756,7 @@ function NewProjectModal({data,setData,employees,onClose,onCreate}:{data:NewProj
 
 function MyTaskList({items,projects,onOpen}:{items:Array<{key:string;id:number;project_id:number;container_id:number|null;title:string;due_date:string|null;assignee_id:number|null;status:string;source:'策略'|'執行'}>;projects:Project[];onOpen:(t:{id:number;project_id:number;container_id:number|null;source:'策略'|'執行'})=>void}) {
   return <div style={{marginTop:18,paddingTop:16,borderTop:'1px solid #e5e7eb'}}>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}><b>我的任務（{items.length}）</b><small style={{color:'#6b7280'}}>依截止日排序・點擊可直接前往</small></div>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}><b>我的任務（{items.length}）</b><small style={{color:'#6b7280'}}>依截止日排序・點擊直接編輯</small></div>
     {!items.length?<div style={{padding:'14px 0',color:'#6b7280'}}>目前沒有未完成的指派任務。</div>:<div style={{display:'grid',gap:8}}>
       {items.slice(0,30).map(t=>{const project=projects.find(p=>p.id===t.project_id);return <button key={t.key} onClick={()=>onOpen(t)} style={{width:'100%',textAlign:'left',border:'1px solid #e5e7eb',background:'#fff',borderRadius:10,padding:'10px 12px',cursor:'pointer',display:'grid',gridTemplateColumns:'minmax(110px,0.8fr) minmax(180px,1.6fr) 90px 76px',gap:10,alignItems:'center'}}>
         <span className="project-tag">{project?.name||'未知專案'}</span>
@@ -765,6 +767,32 @@ function MyTaskList({items,projects,onOpen}:{items:Array<{key:string;id:number;p
       {items.length>30&&<small style={{color:'#6b7280'}}>目前顯示前 30 項，共 {items.length} 項。</small>}
     </div>}
   </div>
+}
+
+
+type DashboardEditableTask = Task | ExecutionTask
+function DashboardTaskModal({source,task,projects,employees,onClose,onUpdateTask,onUpdateExecutionTask,onOpenProject}:{source:'策略'|'執行';task:DashboardEditableTask|null;projects:Project[];employees:Employee[];onClose:()=>void;onUpdateTask:(id:number,p:Partial<Task>)=>void;onUpdateExecutionTask:(id:number,p:Partial<ExecutionTask>)=>void;onOpenProject:(projectId:number,containerId:number|null,source:'策略'|'執行',id:number)=>void}) {
+  if(!task) return null
+  const project=projects.find(p=>p.id===task.project_id)
+  const execution=source==='執行'
+  const xt=execution ? task as ExecutionTask : null
+  const st=!execution ? task as Task : null
+  const save=(patch:Record<string,unknown>)=>execution?onUpdateExecutionTask(task.id,patch as Partial<ExecutionTask>):onUpdateTask(task.id,patch as Partial<Task>)
+  const statuses=execution?EXECUTION_STATUS:TASK_STATUS
+  const containerId=execution?xt?.section_id??null:st?.stage_id??null
+  return <div className="modal-bg" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><div className="modal" style={{maxWidth:720}}>
+    <div className="modal-head"><div><h2>編輯我的任務</h2><small style={{color:'#6b7280'}}>{project?.name||'未知專案'} ・ {source}</small></div><button onClick={onClose}>✕</button></div>
+    <div className="meta-grid">
+      <Field label="任務名稱" wide><input value={task.title} onChange={e=>save({title:e.target.value})}/></Field>
+      <Field label="狀態"><select value={task.status} onChange={e=>save({status:e.target.value})}>{statuses.map(x=><option key={x}>{x}</option>)}</select></Field>
+      <Field label="負責人"><select value={task.assignee_id??''} onChange={e=>save({assignee_id:e.target.value?Number(e.target.value):null})}><option value="">未指派</option>{employees.filter(e=>e.active).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select></Field>
+      {execution&&<Field label="開始日期"><input type="date" value={xt?.start_date||''} onChange={e=>save({start_date:e.target.value||null})}/></Field>}
+      <Field label="截止日期"><input type="date" value={task.due_date||''} onChange={e=>save({due_date:e.target.value||null})}/></Field>
+      {execution&&<Field label="優先級"><select value={xt?.priority||'中'} onChange={e=>save({priority:e.target.value})}>{PRIORITIES.map(x=><option key={x}>{x}</option>)}</select></Field>}
+      <Field label="備註" wide><textarea value={task.note||''} onChange={e=>save({note:e.target.value||null})} placeholder="備註／連結"/></Field>
+    </div>
+    <div className="modal-actions"><button className="btn" onClick={()=>onOpenProject(task.project_id,containerId,source,task.id)}>查看完整專案</button><button className="btn-primary" onClick={onClose}>完成</button></div>
+  </div></div>
 }
 
 function Attention({title,items,employees,projects}:{title:string;items:Array<{key:string;project_id:number;title:string;due_date:string|null;assignee_id:number|null;status:string;source:string}>;employees:Employee[];projects:Project[]}) { if(!items.length)return null;return <div className="attention"><b>{title}（{items.length}）</b>{items.slice(0,12).map(t=>{const project=projects.find(p=>p.id===t.project_id);return <p key={t.key}>• <span className="project-tag">{project?.name||'未知專案'}</span> <span className="source-tag">{t.source}</span> <span className="attention-task-title">{t.title}</span> <small>{t.due_date||''} ・ {employees.find(e=>e.id===t.assignee_id)?.name||'未指派'}</small></p>})}</div> }
