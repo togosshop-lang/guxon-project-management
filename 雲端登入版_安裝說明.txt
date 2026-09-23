@@ -1,0 +1,26 @@
+GUXON 新品管理平台｜雲端登入版
+
+已完成：
+1. Email + 密碼登入（Supabase Auth）
+2. 未登入無法進入系統
+3. 登入後優先用 auth_user_id 對應 employees，Email 為備援
+4. 未綁定／未啟用的帳號會被擋下
+5. Dashboard 顯示目前登入員工姓名、角色與登出
+6. member 預設只看自己的關注任務；manager/admin 可切換員工
+7. 員工自行註冊入口已移除，帳號由管理員建立
+8. manager/admin 才顯示員工管理、模板設定、新增專案
+
+本機測試：
+A. .env.local 確認有：NEXT_PUBLIC_REQUIRE_AUTH=true
+B. Supabase SQL Editor 執行：04_正式雲端登入安全設定.sql
+C. PowerShell 執行 npm run dev
+D. 開 localhost:3000，應先看到員工登入頁
+E. 用已建立並綁定 employees.auth_user_id 的管理員帳號登入
+
+Vercel 正式部署需要設定三個 Environment Variables：
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+NEXT_PUBLIC_REQUIRE_AUTH=true
+
+注意：
+正式安全 SQL 執行後，匿名使用者將不能讀寫資料；請先確認管理員 Auth 帳號已綁定 employees 且 active=true。
