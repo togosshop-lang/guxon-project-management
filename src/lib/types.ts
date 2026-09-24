@@ -101,3 +101,54 @@ export type ExecutionTemplateDefault = {
   enabled: boolean
   updated_at?: string
 }
+
+export type StrategySection = {
+  id: number
+  project_id: number
+  section_key: string
+  name: string
+  description: string | null
+  sort_order: number
+  status: '未開始' | '進行中' | '待確認' | '已確認'
+  created_at?: string
+  updated_at?: string
+}
+
+export type StrategyItem = {
+  id: number
+  project_id: number
+  section_id: number
+  item_key: string | null
+  title: string
+  content: string | null
+  source_status: '缺少資料' | 'AI建議' | '待確認' | '已確認'
+  source_note: string | null
+  assignee_id: number | null
+  sort_order: number
+  created_at?: string
+  updated_at?: string
+}
+
+export type StrategyDependency = {
+  id: number
+  project_id: number
+  strategy_item_id: number
+  execution_task_id: number
+  dependency_type: '提醒' | '定稿前確認' | '開始前確認'
+  note: string | null
+  created_at?: string
+}
+
+export type StrategyReport = {
+  id: number
+  project_id: number
+  version: string
+  status: '草稿' | '待審' | '已核准'
+  title: string | null
+  summary: string | null
+  file_url: string | null
+  generated_at: string | null
+  approved_at: string | null
+  created_at?: string
+  updated_at?: string
+}
