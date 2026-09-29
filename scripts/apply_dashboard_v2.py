@@ -1,9 +1,5 @@
 from pathlib import Path
-p=Path('app/page.tsx')
-s=p.read_text()
-
-# Persist per-user preferred project type in browser.
-s=s.replace("  const [kindFilter, setKindFilter] = useState('全部')", "  const [kindFilter, setKindFilter] = useState('全部')")
+p=Path('app/page.tsx'); s=p.read_text()
 anchor="  const isManager=!REQUIRE_AUTH || !currentEmployee || currentEmployee.role==='manager' || currentEmployee.role==='admin'\n"
 insert="""  const isManager=!REQUIRE_AUTH || !currentEmployee || currentEmployee.role==='manager' || currentEmployee.role==='admin'
   useEffect(()=>{
@@ -17,8 +13,6 @@ insert="""  const isManager=!REQUIRE_AUTH || !currentEmployee || currentEmployee
   }
 """
 if anchor in s: s=s.replace(anchor,insert,1)
-
-# Auto-close projects once all applicable execution work is complete.
 auto_anchor="  function openDashboardTask(t:{id:number;project_id:number;container_id:number|null;source:'策略'|'執行'}) {"
 auto="""  useEffect(()=>{
     projects.forEach(p=>{
@@ -28,7 +22,6 @@ auto="""  useEffect(()=>{
       if(list.length>0 && list.every(t=>isDone(t.status))) updateProject(p.id,{status:'已結案'})
     })
   },[tasks,executionTasks])
-
   const projectIsOverdue=(p:Project)=>{
     if(p.status==='已結案') return false
     const is1688=(p.project_kind||'brand')==='1688'
@@ -45,32 +38,25 @@ auto="""  useEffect(()=>{
     const overdueDays=currentOverdue.reduce((sum,t)=>sum+Math.max(0,-daysFromToday(t.due_date!)),0)
     const done=assigned.filter(t=>isDone(t.status))
     const onTime=done.filter(t=>!t.due_date || (t.updated_at||'').slice(0,10)<=t.due_date).length
-    return {employee:e,assigned:assigned.length,onTime,currentOverdue:currentOverdue.length,overdueDays,onTimeRate:done.length?Math.round(onTime/done.length*100):0}
+    return {employee:e,currentOverdue:currentOverdue.length,overdueDays,onTimeRate:done.length?Math.round(onTime/done.length*100):0}
   })
 
 """+auto_anchor
 if auto_anchor in s: s=s.replace(auto_anchor,auto,1)
-
-old="""    <div className=\"stats\">
-      <Stat label=\"全部專案\" value={projects.length}/><Stat label=\"規劃中\" value={projects.filter(p=>p.status==='規劃中').length}/><Stat label=\"進行中\" value={projects.filter(p=>p.status==='進行中').length}/><Stat label=\"逾期任務\" value={overdue.length} danger={overdue.length>0}/><Stat label=\"卡關任務\" value={blocked.length} danger={blocked.length>0}/>
-    </div>
-"""
-new="""    <section className=\"project-dashboard-v2\">
-      <div className=\"project-status-row\"><b>品牌新品專案</b><Stat label=\"規劃中\" value={statusCount(brandProjects,'規劃中')}/><Stat label=\"進行中\" value={statusCount(brandProjects,'進行中')}/><Stat label=\"已逾期\" value={overdueProjectCount(brandProjects)} danger={overdueProjectCount(brandProjects)>0}/><Stat label=\"已結案\" value={statusCount(brandProjects,'已結案')}/></div>
-      <div className=\"project-status-row\"><b>1688 新品</b><Stat label=\"進行中\" value={statusCount(p1688,'進行中')+statusCount(p1688,'規劃中')}/><Stat label=\"已逾期\" value={overdueProjectCount(p1688)} danger={overdueProjectCount(p1688)>0}/><Stat label=\"已結案\" value={statusCount(p1688,'已結案')}/></div>
-    </section>
-"""
+old='''    <div className="stats">\n      <Stat label="全部專案" value={projects.length}/><Stat label="規劃中" value={projects.filter(p=>p.status==='規劃中').length}/><Stat label="進行中" value={projects.filter(p=>p.status==='進行中').length}/><Stat label="逾期任務" value={overdue.length} danger={overdue.length>0}/><Stat label="卡關任務" value={blocked.length} danger={blocked.length>0}/>\n    </div>\n'''
+new='''    <section className="project-dashboard-v2">\n      <div className="project-status-row"><b>品牌新品專案</b><Stat label="規劃中" value={statusCount(brandProjects,'規劃中')}/><Stat label="進行中" value={statusCount(brandProjects,'進行中')}/><Stat label="已逾期" value={overdueProjectCount(brandProjects)} danger={overdueProjectCount(brandProjects)>0}/><Stat label="已結案" value={statusCount(brandProjects,'已結案')}/></div>\n      <div className="project-status-row"><b>1688 新品</b><Stat label="進行中" value={statusCount(p1688,'進行中')+statusCount(p1688,'規劃中')}/><Stat label="已逾期" value={overdueProjectCount(p1688)} danger={overdueProjectCount(p1688)>0}/><Stat label="已結案" value={statusCount(p1688,'已結案')}/></div>\n    </section>\n'''
 if old not in s: raise SystemExit('stats block not found')
 s=s.replace(old,new,1)
-
-old2="""      <div className=\"panel\"><div className=\"panel-head\"><b>整體任務</b></div><div className=\"summary-list\"><span>完成 <b>{dashboardItems.filter(t=>isDone(t.status)).length}</b></span><span>進行中 <b>{dashboardItems.filter(t=>t.status==='進行中').length}</b></span><span>待審 <b>{dashboardItems.filter(t=>t.status==='待審').length}</b></span><span>未開始 <b>{dashboardItems.filter(t=>t.status==='未開始').length}</b></span></div></div>
-"""
-new2="""      <div className=\"panel\"><div className=\"panel-head\"><b>團隊工作狀況</b><small>逾期天數供管理與績效參考</small></div><div className=\"team-performance\">{employeePerformance.map(x=><div className=\"performance-row\" key={x.employee.id}><b>{x.employee.name}</b><span>準時率 {x.onTimeRate}%</span><span>目前逾期 {x.currentOverdue}</span><span className={x.overdueDays>0?'danger-text':''}>累計逾期 {x.overdueDays} 天</span></div>)}</div></div>
-"""
+old2='''      <div className="panel"><div className="panel-head"><b>整體任務</b></div><div className="summary-list"><span>完成 <b>{dashboardItems.filter(t=>isDone(t.status)).length}</b></span><span>進行中 <b>{dashboardItems.filter(t=>t.status==='進行中').length}</b></span><span>待審 <b>{dashboardItems.filter(t=>t.status==='待審').length}</b></span><span>未開始 <b>{dashboardItems.filter(t=>t.status==='未開始').length}</b></span></div></div>\n'''
+new2='''      <div className="panel"><div className="panel-head"><b>團隊工作狀況</b><small>逾期天數供管理與績效參考</small></div><div className="team-performance">{employeePerformance.map(x=><div className="performance-row" key={x.employee.id}><b>{x.employee.name}</b><span>準時率 {x.onTimeRate}%</span><span>目前逾期 {x.currentOverdue}</span><span className={x.overdueDays>0?'danger-text':''}>累計逾期 {x.overdueDays} 天</span></div>)}</div></div>\n'''
 if old2 not in s: raise SystemExit('summary block not found')
 s=s.replace(old2,new2,1)
-
-s=s.replace("<select value={kindFilter} onChange={e=>setKindFilter(e.target.value)}>","<select value={kindFilter} onChange={e=>changeKindFilter(e.target.value)}>",1)
-
+s=s.replace('<select value={kindFilter} onChange={e=>setKindFilter(e.target.value)}>','<select value={kindFilter} onChange={e=>changeKindFilter(e.target.value)}>',1)
 p.write_text(s)
+css=Path('app/globals.css')
+cs=css.read_text()
+marker='/* Dashboard v2 */'
+if marker not in cs:
+    cs+='''\n\n/* Dashboard v2 */\n.project-dashboard-v2{display:grid;gap:10px;margin-bottom:16px}.project-status-row{display:grid;grid-template-columns:170px repeat(4,1fr);gap:10px;align-items:stretch}.project-status-row>b{display:flex;align-items:center;background:var(--navy);color:#fff;border-radius:11px;padding:0 16px;font-size:14px}.project-status-row .stat{padding:10px 14px}.project-status-row .stat b{font-size:23px}.team-performance{display:grid;gap:7px}.performance-row{display:grid;grid-template-columns:1.2fr 1fr 1fr 1.2fr;gap:8px;align-items:center;padding:9px 10px;background:var(--idlebg);border-radius:8px;font-size:12px}.performance-row>b{font-size:13px}.danger-text{color:var(--stop);font-weight:800}.panel-head small{color:var(--muted);font-size:11px}\n@media(max-width:900px){.project-status-row{grid-template-columns:1fr 1fr}.project-status-row>b{grid-column:1/-1;padding:12px}.performance-row{grid-template-columns:1fr 1fr}}\n@media(max-width:600px){.project-status-row,.performance-row{grid-template-columns:1fr}.project-status-row>b{grid-column:auto}}\n'''
+    css.write_text(cs)
 print('dashboard v2 applied')
