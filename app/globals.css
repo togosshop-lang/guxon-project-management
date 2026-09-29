@@ -36,3 +36,5 @@
 .execution-project-info{display:grid;grid-template-columns:repeat(5,1fr);gap:9px;margin:-7px 0 16px}.execution-project-info span,.execution-project-info a{background:#fff;border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:11px;color:var(--muted);text-decoration:none}.execution-project-info b{display:block;color:var(--ink);font-size:13px;margin-top:2px}.execution-project-info a{display:flex;align-items:center;justify-content:center;color:#8a6b25;font-weight:800}.execution-project-info a:hover{border-color:var(--gold);background:#fffdf7}
 @media(max-width:900px){.execution-project-info{grid-template-columns:1fr 1fr 1fr}}
 @media(max-width:600px){.execution-project-info{grid-template-columns:1fr 1fr}}
+
+.milestone-ok,.milestone-pending{display:inline-flex;align-items:center;border-radius:999px;padding:3px 7px;font-size:10px;font-weight:800}.milestone-ok{background:#edf8f1;color:#267a46}.milestone-pending{background:#fff7e6;color:#9a6b12}

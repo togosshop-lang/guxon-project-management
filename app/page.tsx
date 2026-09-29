@@ -90,6 +90,8 @@ export default function Home() {
   const [executionSections, setExecutionSections] = useState<ExecutionSection[]>([])
   const [executionTasks, setExecutionTasks] = useState<ExecutionTask[]>([])
   const [templateDefaults, setTemplateDefaults] = useState<ExecutionTemplateDefault[]>([])
+  const [productSheets, setProductSheets] = useState<any[]>([])
+  const [strategyItems, setStrategyItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'dashboard'|'employees'|'template'>('dashboard')
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null)
@@ -133,7 +135,7 @@ export default function Home() {
 
   async function loadAll(showLoading = true) {
     if (showLoading) setLoading(true)
-    const [p,s,t,g,e,xs,xt,xd] = await Promise.all([
+    const [p,s,t,g,e,xs,xt,xd,ps,si] = await Promise.all([
       supabase.from('projects').select('*').order('id',{ascending:false}),
       supabase.from('stages').select('*').order('sort_order'),
       supabase.from('tasks').select('*').order('sort_order'),
@@ -142,8 +144,10 @@ export default function Home() {
       supabase.from('execution_sections').select('*').order('sort_order'),
       supabase.from('execution_tasks').select('*').order('sort_order'),
       supabase.from('execution_template_defaults').select('*').order('task_title'),
+      supabase.from('product_data_sheets').select('project_id,completed,updated_at'),
+      supabase.from('strategy_items').select('project_id,source_status'),
     ])
-    const err = p.error || s.error || t.error || g.error || e.error || xs.error || xt.error || xd.error
+    const err = p.error || s.error || t.error || g.error || e.error || xs.error || xt.error || xd.error || ps.error || si.error
     if (err) console.error(err)
     if (!p.error) setProjects((p.data||[]) as Project[])
     if (!s.error) setStages((s.data||[]) as Stage[])
@@ -153,6 +157,8 @@ export default function Home() {
     if (!xs.error) setExecutionSections((xs.data||[]) as ExecutionSection[])
     if (!xt.error) setExecutionTasks((xt.data||[]) as ExecutionTask[])
     if (!xd.error) setTemplateDefaults((xd.data||[]) as ExecutionTemplateDefault[])
+    if (!ps.error) setProductSheets(ps.data||[])
+    if (!si.error) setStrategyItems(si.data||[])
     setLoading(false)
   }
 
@@ -561,9 +567,12 @@ export default function Home() {
       if(p.status==='已結案') return
       const is1688=(p.project_kind||'brand')==='1688'
       const list=is1688 ? tasks.filter(t=>t.project_id===p.id) : executionTasks.filter(t=>t.project_id===p.id&&t.status!=='不適用')
-      if(list.length>0 && list.every(t=>isDone(t.status))) updateProject(p.id,{status:'已結案'})
+      const productReady=is1688 || productSheets.some(x=>x.project_id===p.id&&x.completed)
+      const strategyForProject=strategyItems.filter(x=>x.project_id===p.id)
+      const strategyReady=is1688 || strategyForProject.length===0 || strategyForProject.every(x=>x.source_status==='已確認')
+      if(list.length>0 && list.every(t=>isDone(t.status)) && productReady && strategyReady) updateProject(p.id,{status:'已結案'})
     })
-  },[tasks,executionTasks])
+  },[tasks,executionTasks,productSheets,strategyItems])
   const projectIsOverdue=(p:Project)=>{
     if(p.status==='已結案') return false
     const is1688=(p.project_kind||'brand')==='1688'
@@ -574,6 +583,8 @@ export default function Home() {
   const p1688=projects.filter(p=>(p.project_kind||'brand')==='1688')
   const statusCount=(list:Project[],status:string)=>list.filter(p=>p.status===status).length
   const overdueProjectCount=(list:Project[])=>list.filter(projectIsOverdue).length
+  const productDataDone=(projectId:number)=>productSheets.some(x=>x.project_id===projectId&&x.completed)
+  const strategyDecisionProgress=(projectId:number)=>{const list=strategyItems.filter(x=>x.project_id===projectId);return {total:list.length,done:list.filter(x=>x.source_status==='已確認').length,complete:list.length>0&&list.every(x=>x.source_status==='已確認')}}
   const employeePerformance=employees.filter(e=>e.active).map(e=>{
     const assigned=executionTasks.filter(t=>t.assignee_id===e.id&&t.status!=='不適用')
     const currentOverdue=assigned.filter(t=>t.due_date&&t.due_date<todayIso()&&!isDone(t.status))
@@ -583,7 +594,12 @@ export default function Home() {
     return {employee:e,currentOverdue:currentOverdue.length,overdueDays,onTimeRate:done.length?Math.round(onTime/done.length*100):0}
   })
 
+  useEffect(()=>{const onPop=()=>{setFocusTask(null);setSelectedProjectId(null)};window.addEventListener('popstate',onPop);return()=>window.removeEventListener('popstate',onPop)},[])
+  function openProject(projectId:number){window.history.pushState({projectId},'',`?project=${projectId}`);setSelectedProjectId(projectId)}
+  function closeProject(){if(new URLSearchParams(window.location.search).has('project')) window.history.back(); else {setFocusTask(null);setSelectedProjectId(null)}}
+
   function openDashboardTask(t:{id:number;project_id:number;container_id:number|null;source:'策略'|'執行'}) {
+    window.history.pushState({projectId:t.project_id},'',`?project=${t.project_id}`)
     setFocusTask({source:t.source,id:t.id,project_id:t.project_id,container_id:t.container_id})
     if(t.source==='策略' && t.container_id) setExpanded({[t.container_id]:true})
     setSelectedProjectId(t.project_id)
@@ -596,7 +612,7 @@ export default function Home() {
   if(REQUIRE_AUTH && session && !currentEmployee) return <AccessDeniedScreen email={session.user.email||''} />
   if(view==='employees') return <EmployeeView employees={employees} onBack={()=>setView('dashboard')} onAdd={addEmployee} onUpdate={updateEmployee} />
   if(view==='template') return <TemplateSettingsView employees={employees} defaults={templateDefaults} onBack={()=>setView('dashboard')} onSave={saveTemplateDefault} onAdd1688={add1688TemplateItem} onDelete1688={delete1688TemplateItem} />
-  if(selectedProject) return <ProjectView project={selectedProject} stages={projectStages} tasks={projectTasks} gates={projectGates} executionSections={projectExecutionSections} executionTasks={projectExecutionTasks} employees={employees} expanded={expanded} setExpanded={setExpanded} focusTask={focusTask} onBack={()=>{setFocusTask(null);setSelectedProjectId(null)}} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateStage={updateStage} onToggleGate={toggleGate} onAddTask={addTask} onDeleteTask={deleteTask} onDeleteProject={deleteProject} onUpgradeTemplate={upgradeSelectedProjectTemplate} onCreateExecutionTemplate={()=>createExecutionTemplate(selectedProject)} onUpdateExecutionTask={updateExecutionTask} onAddExecutionTask={addExecutionTask} onDeleteExecutionTask={deleteExecutionTask} onRescheduleExecution={()=>rescheduleExecution(selectedProject)} />
+  if(selectedProject) return <ProjectView project={selectedProject} stages={projectStages} tasks={projectTasks} gates={projectGates} executionSections={projectExecutionSections} executionTasks={projectExecutionTasks} employees={employees} expanded={expanded} setExpanded={setExpanded} focusTask={focusTask} onBack={closeProject} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateStage={updateStage} onToggleGate={toggleGate} onAddTask={addTask} onDeleteTask={deleteTask} onDeleteProject={deleteProject} onUpgradeTemplate={upgradeSelectedProjectTemplate} onCreateExecutionTemplate={()=>createExecutionTemplate(selectedProject)} onUpdateExecutionTask={updateExecutionTask} onAddExecutionTask={addExecutionTask} onDeleteExecutionTask={deleteExecutionTask} onRescheduleExecution={()=>rescheduleExecution(selectedProject)} />
 
   return <main className="page"><div className="shell">
     <Header right={REQUIRE_AUTH&&session?<div className="login-user"><span><b>{currentEmployee?.name||session.user.email}</b><small>{currentEmployee?.role||''}</small></span><button className="btn" onClick={()=>supabase.auth.signOut()}>登出</button></div>:null}/>
@@ -620,7 +636,7 @@ export default function Home() {
       const pt=projectTaskList(p.id), pct=taskProgress(pt), et=executionTaskList(p.id), ep=executionProgress(et), owner=employeeName(p.owner_id)
       const is1688=(p.project_kind||'brand')==='1688'
       const overdueFlag=projectIsOverdue(p)
-      return <button key={p.id} className={`project-card ${is1688?'project-card-1688':''} ${overdueFlag?'project-card-overdue':''}`} onClick={()=>{setSelectedProjectId(p.id);const first=stages.find(s=>s.project_id===p.id)?.id;if(first)setExpanded({[first]:true})}}><div className="project-top"><div><div className="project-heading-line"><h2>{p.name}</h2><span className={`kind-badge ${is1688?'kind-1688':'kind-brand'}`}>{is1688?'1688 新品':'品牌新品'}</span>{overdueFlag&&<span className="pill pill-danger">已逾期</span>}</div><p>{p.version||'-'} ・ 負責：{owner}</p></div><StatusPill text={p.status||'未設定'}/></div><div className="project-meta"><span>上市日 <b>{p.launch_date||'-'}</b></span><span>正式價 <b>NT$ {p.retail_price??'-'}</b></span><span>團購價 <b>NT$ {p.group_price??'-'}</b></span><span>{is1688?'簡易工作':'執行工作'} <b>{is1688?`${pt.filter(t=>isDone(t.status)).length}/${pt.length}`:`${et.filter(t=>isDone(t.status)).length}/${et.filter(t=>countsInExecutionProgress(t.status)).length}`}</b></span></div>{is1688?<div className="single-progress"><span>1688 上架進度 <b>{pct}%</b></span><div className="progress"><i style={{width:`${pct}%`}}/></div></div>:<div className="dual-progress"><div><span>策略管理 <b>{pct}%</b></span><div className="progress"><i style={{width:`${pct}%`}}/></div></div><div><span>執行管理 <b>{et.length?`${ep}%`:'尚未建立'}</b></span><div className="progress execution-progress"><i style={{width:`${ep}%`}}/></div></div></div>}</button>
+      return <button key={p.id} className={`project-card ${is1688?'project-card-1688':''} ${overdueFlag?'project-card-overdue':''}`} onClick={()=>{openProject(p.id);const first=stages.find(s=>s.project_id===p.id)?.id;if(first)setExpanded({[first]:true})}}><div className="project-top"><div><div className="project-heading-line"><h2>{p.name}</h2><span className={`kind-badge ${is1688?'kind-1688':'kind-brand'}`}>{is1688?'1688 新品':'品牌新品'}</span>{overdueFlag&&<span className="pill pill-danger">已逾期</span>}</div><p>{p.version||'-'} ・ 負責：{owner}</p></div><StatusPill text={p.status||'未設定'}/></div><div className="project-meta"><span>上市日 <b>{p.launch_date||'-'}</b></span><span>正式價 <b>NT$ {p.retail_price??'-'}</b></span><span>團購價 <b>NT$ {p.group_price??'-'}</b></span><span>{is1688?'簡易工作':'執行工作'} <b>{is1688?`${pt.filter(t=>isDone(t.status)).length}/${pt.length}`:`${et.filter(t=>isDone(t.status)).length}/${et.filter(t=>countsInExecutionProgress(t.status)).length}`}</b></span></div>{is1688?<div className="single-progress"><span>1688 上架進度 <b>{pct}%</b></span><div className="progress"><i style={{width:`${pct}%`}}/></div></div>:<div className="dual-progress"><div><span>策略管理 <b>{pct}%</b></span><div className="progress"><i style={{width:`${pct}%`}}/></div></div><div><span>執行管理 <b>{et.length?`${ep}%`:'尚未建立'}</b></span><div className="progress execution-progress"><i style={{width:`${ep}%`}}/></div></div></div>}</button>
     })}{!filteredProjects.length&&<div className="empty">目前沒有符合條件的專案</div>}</div>
     {showNewProject&&<NewProjectModal data={newProject} setData={setNewProject} employees={employees} onClose={()=>setShowNewProject(false)} onCreate={createProject}/>} 
     {editingDashboardTask&&<DashboardTaskModal source={editingDashboardTask.source} task={editingDashboardTask.source==='策略'?tasks.find(t=>t.id===editingDashboardTask.id)||null:executionTasks.find(t=>t.id===editingDashboardTask.id)||null} projects={projects} employees={employees} onClose={()=>setEditingDashboardTask(null)} onUpdateTask={updateTask} onUpdateExecutionTask={updateExecutionTask} onOpenProject={(projectId,containerId,source,id)=>{setEditingDashboardTask(null);openDashboardTask({project_id:projectId,container_id:containerId,source,id})}}/>}
