@@ -11,6 +11,9 @@ export type Project = {
   project_type: string | null
   project_kind: 'brand' | '1688' | null
   success_goal: string | null
+  product_url?: string | null
+  notes?: string | null
+  strategy_due_date?: string | null
   created_at?: string
 }
 
