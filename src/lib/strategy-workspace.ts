@@ -37,5 +37,6 @@ export const STRATEGY_WORKSPACE_TEMPLATE = [
   },
 ] as const
 
+// AI 策略是決策工作區，不是第二套任務系統。
+// 每個策略項目只追蹤「資料／決策成熟度」。
 export const STRATEGY_SOURCE_STATUS = ['缺少資料', 'AI建議', '待確認', '已確認'] as const
-export const STRATEGY_SECTION_STATUS = ['未開始', '進行中', '待確認', '已確認'] as const
