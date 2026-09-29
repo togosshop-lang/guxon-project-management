@@ -26,3 +26,4 @@ EOF
           git diff --cached --quiet && exit 0
           git commit -m "Redesign dashboard and add employee overdue metrics"
           git push
+# trigger: 2026-09-29 dashboard-v2
