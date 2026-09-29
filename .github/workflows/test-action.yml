@@ -12,18 +12,9 @@ jobs:
       - uses: actions/checkout@v4
       - run: python scripts/apply_dashboard_v2.py
       - run: |
-          cat >> app/globals.css <<'EOF'
-
-/* Dashboard v2 */
-.project-dashboard-v2{display:grid;gap:10px;margin-bottom:16px}.project-status-row{display:grid;grid-template-columns:170px repeat(4,1fr);gap:10px;align-items:stretch}.project-status-row>b{display:flex;align-items:center;background:var(--navy);color:#fff;border-radius:11px;padding:0 16px;font-size:14px}.project-status-row .stat{padding:10px 14px}.project-status-row .stat b{font-size:23px}.team-performance{display:grid;gap:7px}.performance-row{display:grid;grid-template-columns:1.2fr 1fr 1fr 1.2fr;gap:8px;align-items:center;padding:9px 10px;background:var(--idlebg);border-radius:8px;font-size:12px}.performance-row>b{font-size:13px}.danger-text{color:var(--stop);font-weight:800}.panel-head small{color:var(--muted);font-size:11px}
-@media(max-width:900px){.project-status-row{grid-template-columns:1fr 1fr}.project-status-row>b{grid-column:1/-1;padding:12px}.performance-row{grid-template-columns:1fr 1fr}}
-@media(max-width:600px){.project-status-row,.performance-row{grid-template-columns:1fr}.project-status-row>b{grid-column:auto}}
-EOF
-      - run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add app/page.tsx app/globals.css
           git diff --cached --quiet && exit 0
           git commit -m "Redesign dashboard and add employee overdue metrics"
           git push
-# trigger: 2026-09-29 dashboard-v2
