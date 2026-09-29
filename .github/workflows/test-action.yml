@@ -1,4 +1,4 @@
-name: Apply dashboard v2
+name: Apply dashboard milestones v1
 on:
   push:
     paths:
@@ -10,11 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: python scripts/apply_dashboard_v2.py
+      - run: python scripts/apply_dashboard_milestones_v1.py
+      - run: npm ci
+      - run: npm run build
       - run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add app/page.tsx app/globals.css
           git diff --cached --quiet && exit 0
-          git commit -m "Redesign dashboard and add employee overdue metrics"
+          git commit -m "Add project milestones and browser navigation"
           git push
