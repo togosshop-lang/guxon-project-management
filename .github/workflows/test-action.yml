@@ -11,8 +11,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python scripts/apply_strategy_decision_workspace.py
-      - run: npm ci
-      - run: npm run build
       - run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
