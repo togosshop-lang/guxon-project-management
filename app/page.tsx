@@ -526,7 +526,7 @@ export default function Home() {
   const isManager=!REQUIRE_AUTH || !currentEmployee || currentEmployee.role==='manager' || currentEmployee.role==='admin'
   const effectiveAssigneeFilter=!isManager && currentEmployee ? String(currentEmployee.id) : assigneeFilter
   const activeDashboardProjectIds=useMemo(()=>new Set(projects.filter(p=>p.status==='進行中'||p.status==='已上市').map(p=>p.id)),[projects])
-  const dashboardStrategyTasks=useMemo(()=>tasks.filter(t=>activeDashboardProjectIds.has(t.project_id) && (effectiveAssigneeFilter==='全部'||String(t.assignee_id)===effectiveAssigneeFilter) && (attentionProjectFilter==='全部'||String(t.project_id)===attentionProjectFilter)),[tasks,activeDashboardProjectIds,effectiveAssigneeFilter,attentionProjectFilter])
+  const dashboardStrategyTasks=useMemo(()=>[] as Task[],[]) // 策略決策不列入首頁執行任務統計
   const dashboardExecutionTasks=useMemo(()=>executionTasks.filter(t=>activeDashboardProjectIds.has(t.project_id) && (effectiveAssigneeFilter==='全部'||String(t.assignee_id)===effectiveAssigneeFilter) && (attentionProjectFilter==='全部'||String(t.project_id)===attentionProjectFilter) && t.status!=='不適用'),[executionTasks,activeDashboardProjectIds,effectiveAssigneeFilter,attentionProjectFilter])
   const dashboardItems=useMemo(()=>[
     ...dashboardStrategyTasks.map(t=>({key:`s-${t.id}`,id:t.id,project_id:t.project_id,container_id:t.stage_id,title:t.title,due_date:t.due_date,assignee_id:t.assignee_id,status:t.status,source:'策略' as const})),
@@ -538,8 +538,6 @@ export default function Home() {
   const myTasks=useMemo(()=>{
     if(!currentEmployee) return []
     return [
-      ...tasks.filter(t=>activeDashboardProjectIds.has(t.project_id) && t.assignee_id===currentEmployee.id && !isDone(t.status) && (attentionProjectFilter==='全部'||String(t.project_id)===attentionProjectFilter))
-        .map(t=>({key:`my-s-${t.id}`,id:t.id,project_id:t.project_id,container_id:t.stage_id,title:t.title,due_date:t.due_date,assignee_id:t.assignee_id,status:t.status,source:'策略' as const})),
       ...executionTasks.filter(t=>activeDashboardProjectIds.has(t.project_id) && t.assignee_id===currentEmployee.id && !isDone(t.status) && t.status!=='不適用' && (attentionProjectFilter==='全部'||String(t.project_id)===attentionProjectFilter))
         .map(t=>({key:`my-e-${t.id}`,id:t.id,project_id:t.project_id,container_id:t.section_id,title:t.title,due_date:t.due_date,assignee_id:t.assignee_id,status:t.status,source:'執行' as const})),
     ].sort((a,b)=>{
@@ -620,43 +618,25 @@ function ProjectView(props:ProjectViewProps) {
 }
 
 function StrategyProjectView(props:ProjectViewProps & {onOpenExecution:()=>void}) {
-  const {project,stages,tasks,gates,employees,expanded,setExpanded}=props
-  const pTasks=(sid:number)=>tasks.filter(t=>t.stage_id===sid); const pGates=(sid:number)=>gates.filter(g=>g.stage_id===sid)
-  const progress=(sid:number)=>{const x=pTasks(sid);return x.length?Math.round(x.filter(t=>isDone(t.status)).length/x.length*100):0}
-  const passed=(sid:number)=>{const t=pTasks(sid),g=pGates(sid);return t.length>0&&t.every(x=>isDone(x.status))&&(g.length===0||g.every(x=>x.checked))}
-  const state=(sid:number)=>pTasks(sid).some(t=>t.status==='卡關')?'卡關':passed(sid)?'已通關':pTasks(sid).some(t=>t.status!=='未開始')?'進行中':'未開始'
-  const overall=tasks.length?Math.round(tasks.filter(t=>isDone(t.status)).length/tasks.length*100):0
-  const warnings:string[]=[]
-  stages.forEach((s,i)=>{
-    const ts=pTasks(s.id),gs=pGates(s.id)
-    ts.filter(t=>t.status==='卡關').forEach(t=>warnings.push(`階段 ${s.stage_number}「${t.title}」目前卡關`))
-    if(ts.length&&ts.every(t=>isDone(t.status))&&gs.some(g=>!g.checked)) warnings.push(`階段 ${s.stage_number} 任務已完成，但通關檢核尚未完成`)
-    const next=stages[i+1]; if(next&&!passed(s.id)&&pTasks(next.id).some(t=>t.status!=='未開始')) warnings.push(`階段 ${next.stage_number} 已開始，但前一階段尚未通關`)
-  })
+  const {project}=props
   return <main className="page"><div className="shell"><Header/>
     <ProjectModuleTabs active="strategy" onStrategy={()=>{}} onExecution={props.onOpenExecution}/>
-    <div className="toolbar"><button className="btn" onClick={props.onBack}>← 返回專案列表</button><button className="btn" onClick={()=>setExpanded(Object.fromEntries(stages.map(s=>[s.id,true])))}>展開全部</button><button className="btn" onClick={()=>setExpanded({})}>收合全部</button><button className="btn" onClick={()=>window.print()}>列印／存 PDF</button><button className="btn" onClick={props.onUpgradeTemplate}>補齊完整標準模板</button><button className="btn-danger" onClick={()=>props.onDeleteProject(project)}>刪除專案</button></div>
+    <div className="toolbar"><button className="btn" onClick={props.onBack}>← 返回專案列表</button><button className="btn" onClick={()=>window.print()}>列印／存 PDF</button><button className="btn-danger" onClick={()=>props.onDeleteProject(project)}>刪除專案</button></div>
     <section className="meta-card"><div className="meta-grid">
       <Field label="專案名稱"><DebouncedInput value={project.name} onSave={v=>props.onUpdateProject(project.id,{name:v})}/></Field>
       <Field label="型號"><DebouncedInput value={project.version||''} onSave={v=>props.onUpdateProject(project.id,{version:v||null})}/></Field>
-      <Field label="主要負責人"><select value={project.owner_id??''} onChange={e=>props.onUpdateProject(project.id,{owner_id:e.target.value?Number(e.target.value):null})}><option value="">未指派</option>{employees.filter(e=>e.active).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select></Field>
       <Field label="上市日 D0"><input type="date" value={project.launch_date||''} onChange={e=>props.onUpdateProject(project.id,{launch_date:e.target.value||null})}/></Field>
       <Field label="正式定價"><input type="number" value={project.retail_price??''} onChange={e=>props.onUpdateProject(project.id,{retail_price:e.target.value?Number(e.target.value):null})}/></Field>
       <Field label="團購／活動價"><input type="number" value={project.group_price??''} onChange={e=>props.onUpdateProject(project.id,{group_price:e.target.value?Number(e.target.value):null})}/></Field>
-      <Field label="本輪預算版本"><select value={project.budget_version||''} onChange={e=>props.onUpdateProject(project.id,{budget_version:e.target.value||null})}>{BUDGETS.map(x=><option key={x} value={x}>{x||'未決定'}</option>)}</select></Field>
-      <Field label="本輪性質"><select value={project.project_type||''} onChange={e=>props.onUpdateProject(project.id,{project_type:e.target.value||null})}>{PROJECT_TYPES.map(x=><option key={x} value={x}>{x||'未決定'}</option>)}</select></Field>
       <Field label="專案狀態"><select value={project.status||'規劃中'} onChange={e=>props.onUpdateProject(project.id,{status:e.target.value})}>{PROJECT_STATUS.map(x=><option key={x}>{x}</option>)}</select></Field>
-      <Field label="本輪成功定義" wide><DebouncedInput value={project.success_goal||''} onSave={v=>props.onUpdateProject(project.id,{success_goal:v||null})} placeholder="例：確認勝出素材與可放大通路"/></Field><Field label="備註" wide><DebouncedTextarea value={(project as any).notes||''} onSave={v=>props.onUpdateProject(project.id,{notes:v||null} as any)} placeholder="專案備註"/></Field>
+      <Field label="本輪成功定義" wide><DebouncedInput value={project.success_goal||''} onSave={v=>props.onUpdateProject(project.id,{success_goal:v||null})} placeholder="例：確認目標客群、價格與上市主打方向"/></Field>
+      <Field label="備註" wide><DebouncedTextarea value={(project as any).notes||''} onSave={v=>props.onUpdateProject(project.id,{notes:v||null} as any)} placeholder="專案備註"/></Field>
     </div></section>
-    <section className="overall"><div><b>策略管理進度</b><p>{tasks.filter(t=>isDone(t.status)).length}/{tasks.length} 項任務完成</p></div><strong>{overall}%</strong><div className="overall-bar"><i style={{width:`${overall}%`}}/></div></section>
-    <div className="stage-cards">{stages.map(s=><button key={s.id} className={`stage-mini state-${state(s.id)}`} onClick={()=>setExpanded(c=>({...c,[s.id]:true}))}><small>STAGE {s.stage_number}</small><b>{s.name}</b><div className="mini-progress"><i style={{width:`${progress(s.id)}%`}}/></div><span>{pTasks(s.id).filter(t=>isDone(t.status)).length}/{pTasks(s.id).length} 任務 ・ 檢核 {pGates(s.id).filter(g=>g.checked).length}/{pGates(s.id).length}</span></button>)}</div>
-    {warnings.length?<div className="alert danger"><b>需要處理（{warnings.length}）</b>{warnings.map((w,i)=><p key={i}>• {w}</p>)}</div>:<div className="alert ok"><b>目前沒有卡關項目</b><p>各階段依序推進中。</p></div>}
-    <div className="stages">{stages.map(stage=>{
-      const open=!!expanded[stage.id], label=state(stage.id), sp=progress(stage.id), ts=pTasks(stage.id), gs=pGates(stage.id)
-      return <section key={stage.id} className={`stage state-${label}`}><button className="stage-head" onClick={()=>setExpanded(c=>({...c,[stage.id]:!open}))}><span className="stage-num">{stage.stage_number}</span><span className="stage-main"><b>{stage.name}</b><small>{stage.description||''}</small></span><StatusPill text={`${label} ${sp}%`}/><span>{open?'▲':'▼'}</span></button>{open&&<div className="stage-body"><div className="section-title"><b>工作項目</b><button onClick={()=>props.onAddTask(stage.id)}>＋ 新增工作項目</button></div><div className="table-wrap"><table><thead><tr><th>期程</th><th>任務</th><th>負責</th><th>狀態</th><th>備註／連結</th><th></th></tr></thead><tbody>{ts.map(task=><tr id={`focus-策略-${task.id}`} key={task.id} className={isDone(task.status)?'done-row':''}><td className="date-cell"><b>{dLabel(task.due_offset)}</b><input type="date" value={task.due_date||''} onChange={e=>props.onUpdateTask(task.id,{due_date:e.target.value||null})}/></td><td><DebouncedInput value={task.title} onSave={v=>props.onUpdateTask(task.id,{title:v})}/><DebouncedTextarea value={task.description||''} onSave={v=>props.onUpdateTask(task.id,{description:v||null})} placeholder="任務說明"/></td><td><select value={task.assignee_id??''} onChange={e=>props.onUpdateTask(task.id,{assignee_id:e.target.value?Number(e.target.value):null})}><option value="">未指派</option>{employees.filter(e=>e.active).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select></td><td><select className={`status-select s-${task.status}`} value={isDone(task.status)?'已完成':task.status} onChange={e=>props.onUpdateTask(task.id,{status:e.target.value})}>{TASK_STATUS.map(x=><option key={x}>{x}</option>)}</select></td><td><DebouncedInput value={task.note||''} onSave={v=>props.onUpdateTask(task.id,{note:v||null})} placeholder="備註／連結"/></td><td><button className="text-danger" onClick={()=>props.onDeleteTask(task.id)}>刪除</button></td></tr>)}</tbody></table></div>
-        <div className="gate-box"><b>通關檢核 ── 未全部勾選不得進入下一階段</b><p>開始下一階段前，請先確認以下條件。</p>{gs.map(g=><label key={g.id} className="gate-line"><input type="checkbox" checked={g.checked} onChange={e=>props.onToggleGate(g,e.target.checked)}/><span>{g.label}</span></label>)}<div className={`verdict ${passed(stage.id)?'pass':'hold'}`}>{passed(stage.id)?'✓ 本階段已通關，可進入下一階段':`尚未通關：任務 ${ts.filter(t=>isDone(t.status)).length}/${ts.length}，檢核 ${gs.filter(g=>g.checked).length}/${gs.length}`}</div><Field label="階段核准備註"><DebouncedTextarea value={stage.approval_note||''} onSave={v=>props.onUpdateStage(stage.id,{approval_note:v||null})} placeholder="原始判斷 → 新發現 → 是否修正 → 影響哪些工作"/></Field></div>
-      </div>}</section>
-    })}</div>
+    <section className="overall"><div><b>新品策略管理</b><p>這裡只管理策略決策，不再建立第二套執行任務。</p></div><strong style={{fontSize:18}}>決策工作區</strong></section>
+    <div className="alert ok"><b>策略與執行已分開</b><p>策略確認「做什麼、為什麼做」；日期、負責人、製作、上架、KOL、廣告等工作全部由「新品執行管理」追蹤。</p></div>
+    <div className="stage-cards">{['商品定位','商業策略','行銷方向','上市確認'].map((name,i)=><div key={name} className="stage-mini"><small>DECISION {i+1}</small><b>{name}</b><span>{i===0?'客群・情境・核心差異':i===1?'價格・毛利・通路':i===2?'主打訊息・素材方向・活動':'上市條件・最終確認'}</span></div>)}</div>
+    <section className="panel" style={{marginTop:18}}><div className="panel-head"><div><b>AI 策略決策工作區</b><p style={{margin:'6px 0 0',color:'#6b7280'}}>使用 AI 策略資料中心與決策卡完成策略；流程：缺少資料 → AI 建議 → 待確認 → 已確認。</p></div></div><div style={{padding:'4px 0 2px'}}><button className="btn-primary" onClick={()=>{window.location.href=`/strategy/${project.id}`}}>進入 AI 新品策略 →</button></div></section>
+    <section className="panel" style={{marginTop:14}}><div className="panel-head"><div><b>新品執行管理維持原樣</b><p style={{margin:'6px 0 0',color:'#6b7280'}}>需要安排日期、負責人、任務狀態或追蹤進度時，切換到「新品執行管理」。</p></div><button className="btn" onClick={props.onOpenExecution}>前往新品執行管理 →</button></div></section>
   </div></main>
 }
 
