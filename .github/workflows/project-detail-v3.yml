@@ -1,0 +1,29 @@
+name: Apply project detail v3
+on:
+  push:
+    paths:
+      - .github/workflows/project-detail-v3.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python scripts/apply_project_detail_v3.py
+      - run: |
+          cat >> app/globals.css <<'EOF'
+
+/* Project detail v3 */
+.project-card-overdue{border-color:#efcaca;box-shadow:inset 4px 0 0 var(--stop)}
+.execution-project-info{display:grid;grid-template-columns:repeat(5,1fr);gap:9px;margin:-7px 0 16px}.execution-project-info span,.execution-project-info a{background:#fff;border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:11px;color:var(--muted);text-decoration:none}.execution-project-info b{display:block;color:var(--ink);font-size:13px;margin-top:2px}.execution-project-info a{display:flex;align-items:center;justify-content:center;color:#8a6b25;font-weight:800}.execution-project-info a:hover{border-color:var(--gold);background:#fffdf7}
+@media(max-width:900px){.execution-project-info{grid-template-columns:1fr 1fr 1fr}}
+@media(max-width:600px){.execution-project-info{grid-template-columns:1fr 1fr}}
+EOF
+      - run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add app/page.tsx app/globals.css src/lib/types.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "Improve project detail navigation and strategy deadlines"
+          git push
