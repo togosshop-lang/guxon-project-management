@@ -524,6 +524,15 @@ export default function Home() {
     return employees.find(e=>e.auth_user_id===session.user.id) || (loginEmail ? employees.find(e=>(e.email||'').toLowerCase()===loginEmail) : null) || null
   },[session,employees])
   const isManager=!REQUIRE_AUTH || !currentEmployee || currentEmployee.role==='manager' || currentEmployee.role==='admin'
+  useEffect(()=>{
+    if(!currentEmployee) return
+    const saved=window.localStorage.getItem(`guxon-default-kind-${currentEmployee.id}`)
+    if(saved==='brand'||saved==='1688'||saved==='全部') setKindFilter(saved)
+  },[currentEmployee?.id])
+  function changeKindFilter(value:string) {
+    setKindFilter(value)
+    if(currentEmployee) window.localStorage.setItem(`guxon-default-kind-${currentEmployee.id}`,value)
+  }
   const effectiveAssigneeFilter=!isManager && currentEmployee ? String(currentEmployee.id) : assigneeFilter
   const activeDashboardProjectIds=useMemo(()=>new Set(projects.filter(p=>p.status==='進行中'||p.status==='已上市').map(p=>p.id)),[projects])
   const dashboardStrategyTasks=useMemo(()=>[] as Task[],[]) // 策略決策不列入首頁執行任務統計
@@ -547,6 +556,33 @@ export default function Home() {
       return a.title.localeCompare(b.title)
     })
   },[tasks,executionTasks,currentEmployee,attentionProjectFilter,activeDashboardProjectIds])
+  useEffect(()=>{
+    projects.forEach(p=>{
+      if(p.status==='已結案') return
+      const is1688=(p.project_kind||'brand')==='1688'
+      const list=is1688 ? tasks.filter(t=>t.project_id===p.id) : executionTasks.filter(t=>t.project_id===p.id&&t.status!=='不適用')
+      if(list.length>0 && list.every(t=>isDone(t.status))) updateProject(p.id,{status:'已結案'})
+    })
+  },[tasks,executionTasks])
+  const projectIsOverdue=(p:Project)=>{
+    if(p.status==='已結案') return false
+    const is1688=(p.project_kind||'brand')==='1688'
+    const list=is1688 ? tasks.filter(t=>t.project_id===p.id) : executionTasks.filter(t=>t.project_id===p.id&&t.status!=='不適用')
+    return list.some(t=>t.due_date&&t.due_date<todayIso()&&!isDone(t.status))
+  }
+  const brandProjects=projects.filter(p=>(p.project_kind||'brand')==='brand')
+  const p1688=projects.filter(p=>(p.project_kind||'brand')==='1688')
+  const statusCount=(list:Project[],status:string)=>list.filter(p=>p.status===status).length
+  const overdueProjectCount=(list:Project[])=>list.filter(projectIsOverdue).length
+  const employeePerformance=employees.filter(e=>e.active).map(e=>{
+    const assigned=executionTasks.filter(t=>t.assignee_id===e.id&&t.status!=='不適用')
+    const currentOverdue=assigned.filter(t=>t.due_date&&t.due_date<todayIso()&&!isDone(t.status))
+    const overdueDays=currentOverdue.reduce((sum,t)=>sum+Math.max(0,-daysFromToday(t.due_date!)),0)
+    const done=assigned.filter(t=>isDone(t.status))
+    const onTime=done.filter(t=>!t.due_date || (t.updated_at||'').slice(0,10)<=t.due_date).length
+    return {employee:e,currentOverdue:currentOverdue.length,overdueDays,onTimeRate:done.length?Math.round(onTime/done.length*100):0}
+  })
+
   function openDashboardTask(t:{id:number;project_id:number;container_id:number|null;source:'策略'|'執行'}) {
     setFocusTask({source:t.source,id:t.id,project_id:t.project_id,container_id:t.container_id})
     if(t.source==='策略' && t.container_id) setExpanded({[t.container_id]:true})
@@ -566,19 +602,20 @@ export default function Home() {
     <Header right={REQUIRE_AUTH&&session?<div className="login-user"><span><b>{currentEmployee?.name||session.user.email}</b><small>{currentEmployee?.role||''}</small></span><button className="btn" onClick={()=>supabase.auth.signOut()}>登出</button></div>:null}/>
     <div className="page-title-row"><div><h1>新品管理平台</h1><p>品牌新品使用完整策略／執行流程；1688 新品使用簡化上架流程</p></div><div className="actions">{isManager&&<button className="btn" onClick={()=>setView('employees')}>員工管理</button>}{isManager&&<button className="btn" onClick={()=>setView('template')}>執行模板設定</button>}{isManager&&<button className="btn-primary" onClick={()=>setShowNewProject(true)}>＋ 新增專案</button>}</div></div>
 
-    <div className="stats">
-      <Stat label="全部專案" value={projects.length}/><Stat label="規劃中" value={projects.filter(p=>p.status==='規劃中').length}/><Stat label="進行中" value={projects.filter(p=>p.status==='進行中').length}/><Stat label="逾期任務" value={overdue.length} danger={overdue.length>0}/><Stat label="卡關任務" value={blocked.length} danger={blocked.length>0}/>
-    </div>
+    <section className="project-dashboard-v2">
+      <div className="project-status-row"><b>品牌新品專案</b><Stat label="規劃中" value={statusCount(brandProjects,'規劃中')}/><Stat label="進行中" value={statusCount(brandProjects,'進行中')}/><Stat label="已逾期" value={overdueProjectCount(brandProjects)} danger={overdueProjectCount(brandProjects)>0}/><Stat label="已結案" value={statusCount(brandProjects,'已結案')}/></div>
+      <div className="project-status-row"><b>1688 新品</b><Stat label="進行中" value={statusCount(p1688,'進行中')+statusCount(p1688,'規劃中')}/><Stat label="已逾期" value={overdueProjectCount(p1688)} danger={overdueProjectCount(p1688)>0}/><Stat label="已結案" value={statusCount(p1688,'已結案')}/></div>
+    </section>
 
     <section className="dashboard-grid">
       <div className="panel"><div className="panel-head"><b>需要關注</b><div className="attention-filters"><select value={attentionProjectFilter} onChange={e=>setAttentionProjectFilter(e.target.value)}><option value="全部">全部專案</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>{isManager?<select value={assigneeFilter} onChange={e=>setAssigneeFilter(e.target.value)}><option value="全部">全部員工</option>{employees.filter(e=>e.active).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select>:<span className="viewer-chip">我的任務：{currentEmployee?.name||'目前帳號'}</span>}</div></div>
         <Attention title="逾期" items={overdue} employees={employees} projects={projects}/><Attention title="7 天內到期" items={dueSoon} employees={employees} projects={projects}/><Attention title="卡關" items={blocked} employees={employees} projects={projects}/>
         <MyTaskList items={myTasks} projects={projects} onOpen={t=>setEditingDashboardTask({source:t.source,id:t.id})}/>
       </div>
-      <div className="panel"><div className="panel-head"><b>整體任務</b></div><div className="summary-list"><span>完成 <b>{dashboardItems.filter(t=>isDone(t.status)).length}</b></span><span>進行中 <b>{dashboardItems.filter(t=>t.status==='進行中').length}</b></span><span>待審 <b>{dashboardItems.filter(t=>t.status==='待審').length}</b></span><span>未開始 <b>{dashboardItems.filter(t=>t.status==='未開始').length}</b></span></div></div>
+      <div className="panel"><div className="panel-head"><b>團隊工作狀況</b><small>逾期天數供管理與績效參考</small></div><div className="team-performance">{employeePerformance.map(x=><div className="performance-row" key={x.employee.id}><b>{x.employee.name}</b><span>準時率 {x.onTimeRate}%</span><span>目前逾期 {x.currentOverdue}</span><span className={x.overdueDays>0?'danger-text':''}>累計逾期 {x.overdueDays} 天</span></div>)}</div></div>
     </section>
 
-    <div className="filters"><input placeholder="搜尋專案名稱或型號…" value={query} onChange={e=>setQuery(e.target.value)}/><select value={kindFilter} onChange={e=>setKindFilter(e.target.value)}><option value="全部">全部類型</option><option value="brand">GUXON 品牌新品</option><option value="1688">1688 新品</option></select><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option>全部</option>{PROJECT_STATUS.map(x=><option key={x}>{x}</option>)}</select></div>
+    <div className="filters"><input placeholder="搜尋專案名稱或型號…" value={query} onChange={e=>setQuery(e.target.value)}/><select value={kindFilter} onChange={e=>changeKindFilter(e.target.value)}><option value="全部">全部類型</option><option value="brand">GUXON 品牌新品</option><option value="1688">1688 新品</option></select><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option>全部</option>{PROJECT_STATUS.map(x=><option key={x}>{x}</option>)}</select></div>
     <div className="project-list">{filteredProjects.map(p=>{
       const pt=projectTaskList(p.id), pct=taskProgress(pt), et=executionTaskList(p.id), ep=executionProgress(et), owner=employeeName(p.owner_id)
       const is1688=(p.project_kind||'brand')==='1688'
