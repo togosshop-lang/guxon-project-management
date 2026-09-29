@@ -1,0 +1,42 @@
+from pathlib import Path
+
+p=Path('app/page.tsx')
+s=p.read_text()
+
+old="const dashboardStrategyTasks=useMemo(()=>tasks.filter(t=>activeDashboardProjectIds.has(t.project_id) && (effectiveAssigneeFilter==='全部'||String(t.assignee_id)===effectiveAssigneeFilter) && (attentionProjectFilter==='全部'||String(t.project_id)===attentionProjectFilter)),[tasks,activeDashboardProjectIds,effectiveAssigneeFilter,attentionProjectFilter])"
+if old in s:
+    s=s.replace(old,"const dashboardStrategyTasks=useMemo(()=>[] as Task[],[]) // 策略決策不列入首頁執行任務統計")
+
+old_my="""      ...tasks.filter(t=>activeDashboardProjectIds.has(t.project_id) && t.assignee_id===currentEmployee.id && !isDone(t.status) && (attentionProjectFilter==='全部'||String(t.project_id)===attentionProjectFilter))
+        .map(t=>({key:`my-s-${t.id}`,id:t.id,project_id:t.project_id,container_id:t.stage_id,title:t.title,due_date:t.due_date,assignee_id:t.assignee_id,status:t.status,source:'策略' as const})),
+"""
+s=s.replace(old_my,'')
+
+start=s.index('function StrategyProjectView(')
+end=s.index('function Simple1688ProjectView(',start)
+new='''function StrategyProjectView(props:ProjectViewProps & {onOpenExecution:()=>void}) {
+  const {project}=props
+  return <main className="page"><div className="shell"><Header/>
+    <ProjectModuleTabs active="strategy" onStrategy={()=>{}} onExecution={props.onOpenExecution}/>
+    <div className="toolbar"><button className="btn" onClick={props.onBack}>← 返回專案列表</button><button className="btn" onClick={()=>window.print()}>列印／存 PDF</button><button className="btn-danger" onClick={()=>props.onDeleteProject(project)}>刪除專案</button></div>
+    <section className="meta-card"><div className="meta-grid">
+      <Field label="專案名稱"><DebouncedInput value={project.name} onSave={v=>props.onUpdateProject(project.id,{name:v})}/></Field>
+      <Field label="型號"><DebouncedInput value={project.version||''} onSave={v=>props.onUpdateProject(project.id,{version:v||null})}/></Field>
+      <Field label="上市日 D0"><input type="date" value={project.launch_date||''} onChange={e=>props.onUpdateProject(project.id,{launch_date:e.target.value||null})}/></Field>
+      <Field label="正式定價"><input type="number" value={project.retail_price??''} onChange={e=>props.onUpdateProject(project.id,{retail_price:e.target.value?Number(e.target.value):null})}/></Field>
+      <Field label="團購／活動價"><input type="number" value={project.group_price??''} onChange={e=>props.onUpdateProject(project.id,{group_price:e.target.value?Number(e.target.value):null})}/></Field>
+      <Field label="專案狀態"><select value={project.status||'規劃中'} onChange={e=>props.onUpdateProject(project.id,{status:e.target.value})}>{PROJECT_STATUS.map(x=><option key={x}>{x}</option>)}</select></Field>
+      <Field label="本輪成功定義" wide><DebouncedInput value={project.success_goal||''} onSave={v=>props.onUpdateProject(project.id,{success_goal:v||null})} placeholder="例：確認目標客群、價格與上市主打方向"/></Field>
+      <Field label="備註" wide><DebouncedTextarea value={(project as any).notes||''} onSave={v=>props.onUpdateProject(project.id,{notes:v||null} as any)} placeholder="專案備註"/></Field>
+    </div></section>
+    <section className="overall"><div><b>新品策略管理</b><p>這裡只管理策略決策，不再建立第二套執行任務。</p></div><strong style={{fontSize:18}}>決策工作區</strong></section>
+    <div className="alert ok"><b>策略與執行已分開</b><p>策略確認「做什麼、為什麼做」；日期、負責人、製作、上架、KOL、廣告等工作全部由「新品執行管理」追蹤。</p></div>
+    <div className="stage-cards">{['商品定位','商業策略','行銷方向','上市確認'].map((name,i)=><div key={name} className="stage-mini"><small>DECISION {i+1}</small><b>{name}</b><span>{i===0?'客群・情境・核心差異':i===1?'價格・毛利・通路':i===2?'主打訊息・素材方向・活動':'上市條件・最終確認'}</span></div>)}</div>
+    <section className="panel" style={{marginTop:18}}><div className="panel-head"><div><b>AI 策略決策工作區</b><p style={{margin:'6px 0 0',color:'#6b7280'}}>使用 AI 策略資料中心與決策卡完成策略；流程：缺少資料 → AI 建議 → 待確認 → 已確認。</p></div></div><div style={{padding:'4px 0 2px'}}><button className="btn-primary" onClick={()=>{window.location.href=`/strategy/${project.id}`}}>進入 AI 新品策略 →</button></div></section>
+    <section className="panel" style={{marginTop:14}}><div className="panel-head"><div><b>新品執行管理維持原樣</b><p style={{margin:'6px 0 0',color:'#6b7280'}}>需要安排日期、負責人、任務狀態或追蹤進度時，切換到「新品執行管理」。</p></div><button className="btn" onClick={props.onOpenExecution}>前往新品執行管理 →</button></div></section>
+  </div></main>
+}
+
+'''
+s=s[:start]+new+s[end:]
+p.write_text(s)
