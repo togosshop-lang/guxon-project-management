@@ -16,3 +16,10 @@ jobs:
       - run: python scripts/apply_strategy_completion_v1.py
       - run: npm ci
       - run: npm run build
+      - run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add app/page.tsx
+          git diff --cached --quiet && exit 0
+          git commit -m "Add overall strategy completion workflow"
+          git push
