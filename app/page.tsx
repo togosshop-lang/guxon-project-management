@@ -531,7 +531,11 @@ export default function Home() {
     if(p.status==='已結案') return false
     const is1688=(p.project_kind||'brand')==='1688'
     const list=is1688 ? tasks.filter(t=>t.project_id===p.id) : executionTasks.filter(t=>t.project_id===p.id&&t.status!=='不適用')
-    return list.some(t=>t.due_date&&t.due_date<todayIso()&&!isDone(t.status))
+    const taskOverdue=list.some(t=>t.due_date&&t.due_date<todayIso()&&!isDone(t.status))
+    if(is1688) return taskOverdue
+    const strategyDue=(p as any).strategy_due_date
+    const strategyOverdue=!!strategyDue && strategyDue<todayIso() && !(p as any).strategy_completed
+    return taskOverdue || strategyOverdue
   }
   const brandProjects=projects.filter(p=>(p.project_kind||'brand')==='brand')
   const p1688=projects.filter(p=>(p.project_kind||'brand')==='1688')
