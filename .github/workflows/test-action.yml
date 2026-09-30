@@ -13,13 +13,13 @@ jobs:
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder-publishable-key
     steps:
       - uses: actions/checkout@v4
-      - run: python scripts/apply_strategy_completion_v1.py
+      - run: python scripts/apply_team_performance_ui_v1.py
       - run: npm ci
       - run: npm run build
       - run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add app/page.tsx
+          git add app/page.tsx app/globals.css
           git diff --cached --quiet && exit 0
-          git commit -m "Add overall strategy completion workflow"
+          git commit -m "Improve team performance and dashboard layout"
           git push
