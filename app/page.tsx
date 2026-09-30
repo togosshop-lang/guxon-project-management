@@ -591,7 +591,7 @@ export default function Home() {
     const overdueDays=currentOverdue.reduce((sum,t)=>sum+Math.max(0,-daysFromToday(t.due_date!)),0)
     const done=assigned.filter(t=>isDone(t.status))
     const onTime=done.filter(t=>!t.due_date || (t.updated_at||'').slice(0,10)<=t.due_date).length
-    return {employee:e,currentOverdue:currentOverdue.length,overdueDays,onTimeRate:done.length?Math.round(onTime/done.length*100):0}
+    return {employee:e,assigned:assigned.length,done:done.length,currentOverdue:currentOverdue.length,overdueDays,onTimeRate:done.length?Math.round(onTime/done.length*100):0}
   })
 
   useEffect(()=>{const onPop=()=>{setFocusTask(null);setSelectedProjectId(null)};window.addEventListener('popstate',onPop);return()=>window.removeEventListener('popstate',onPop)},[])
@@ -628,7 +628,7 @@ export default function Home() {
         <Attention title="逾期" items={overdue} employees={employees} projects={projects}/><Attention title="7 天內到期" items={dueSoon} employees={employees} projects={projects}/><Attention title="卡關" items={blocked} employees={employees} projects={projects}/>
         <MyTaskList items={myTasks} projects={projects} onOpen={t=>setEditingDashboardTask({source:t.source,id:t.id})}/>
       </div>
-      <div className="panel"><div className="panel-head"><b>團隊工作狀況</b><small>逾期天數供管理與績效參考</small></div><div className="team-performance">{employeePerformance.map(x=><div className="performance-row" key={x.employee.id}><b>{x.employee.name}</b><span>準時率 {x.onTimeRate}%</span><span>目前逾期 {x.currentOverdue}</span><span className={x.overdueDays>0?'danger-text':''}>累計逾期 {x.overdueDays} 天</span></div>)}</div></div>
+      <div className="panel"><div className="panel-head"><b>團隊工作狀況</b><small>目前執行狀況，供管理與績效參考</small></div><div className="team-performance">{employeePerformance.map(x=><div className="performance-row" key={x.employee.id}><div className="performance-person"><b>{x.employee.name}</b><small>{x.employee.department||'未設定職務'}</small></div><div className="performance-metric"><small>完成任務</small><b>{x.done}/{x.assigned}</b></div><div className="performance-metric"><small>準時率</small><b>{x.onTimeRate}%</b></div><div className="performance-metric"><small>逾期任務</small><b className={x.currentOverdue>0?'danger-text':''}>{x.currentOverdue}</b></div><div className="performance-metric"><small>目前逾期總天數</small><b className={x.overdueDays>0?'danger-text':''}>{x.overdueDays} 天</b></div></div>)}</div><p className="performance-note">逾期天數僅計算目前尚未完成且已超過期限的執行任務；完成後不再累加於此數字。</p></div>
     </section>
 
     <div className="filters"><input placeholder="搜尋專案名稱或型號…" value={query} onChange={e=>setQuery(e.target.value)}/><select value={kindFilter} onChange={e=>changeKindFilter(e.target.value)}><option value="全部">全部類型</option><option value="brand">GUXON 品牌新品</option><option value="1688">1688 新品</option></select><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option>全部</option>{PROJECT_STATUS.map(x=><option key={x}>{x}</option>)}</select></div>
