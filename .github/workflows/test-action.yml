@@ -1,4 +1,4 @@
-name: Apply project card stage status v1
+name: Apply strategy overdue v1
 on:
   push:
     paths:
@@ -19,7 +19,7 @@ jobs:
       - run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add app/page.tsx app/globals.css
+          git add app/page.tsx
           git diff --cached --quiet && exit 0
-          git commit -m "Show three-stage status on brand project cards"
+          git commit -m "Include strategy deadline in overdue status"
           git push
