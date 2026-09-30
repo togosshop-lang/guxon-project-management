@@ -342,59 +342,13 @@ export default function Home() {
       return
     }
 
-    if(newProject.strategy_mode!=='none') {
-      const strategyTemplate = newProject.strategy_mode==='full' ? STANDARD_TEMPLATE : SIMPLE_STRATEGY_TEMPLATE
-      const {data:createdStages,error:stageError}=await supabase.from('stages').insert(
-        strategyTemplate.map((s:any,i:number)=>({
-          project_id:project.id,
-          stage_number:i+1,
-          name:s.name,
-          description:newProject.strategy_mode==='full' ? `${s.range} ｜ ${s.description}` : s.description,
-          status:'未開始',
-          sort_order:i+1,
-          approval_note:null,
-        }))
-      ).select()
-      if(stageError||!createdStages) return alert('建立策略階段失敗：'+(stageError?.message||'未知錯誤'))
-
-      const taskRows:TaskInsert[]=[]
-      const gateRows:GateInsert[]=[]
-      ;(createdStages as Stage[]).forEach((stage,i)=>{
-        const tpl:any = strategyTemplate[i]
-        tpl.tasks.forEach((task:any,j:number)=>taskRows.push({
-          project_id:project.id,
-          stage_id:stage.id,
-          title:task.title,
-          description:task.description,
-          assignee_id:departmentAssignee(task.ownerDepartment,ownerId),
-          status:'未開始',
-          due_offset:task.dueOffset,
-          due_date:project.launch_date?addDays(project.launch_date,task.dueOffset):null,
-          note:null,
-          sort_order:j+1,
-        }))
-        if(newProject.strategy_mode==='full') {
-          tpl.gates.forEach((label:string,j:number)=>gateRows.push({
-            project_id:project.id,stage_id:stage.id,label,checked:false,sort_order:j+1
-          }))
-        }
-      })
-
-      const taskResult=taskRows.length?await supabase.from('tasks').insert(taskRows):{error:null}
-      const gateResult=gateRows.length?await supabase.from('stage_gates').insert(gateRows):{error:null}
-      if(taskResult.error||gateResult.error) return alert('建立策略流程失敗：'+(taskResult.error?.message||gateResult.error?.message||''))
-    }
+    // 品牌新品的策略改由 AI 策略決策工作區管理，不再建立舊版策略任務。
     setShowNewProject(false)
     setNewProject({name:'',version:'v1.0',owner_id:'',launch_date:'',retail_price:'',group_price:'',status:'規劃中',budget_version:'',project_type:'',project_kind:'brand',success_goal:'',product_url:'',notes:'',strategy_mode:'simple'})
     await createExecutionTemplate(project as Project, true)
     await loadAll(false)
     setSelectedProjectId(project.id)
-    const strategyLabel = newProject.strategy_mode==='full'
-      ? '完整策略 6 階段／41 項工作'
-      : newProject.strategy_mode==='simple'
-        ? '簡易策略 4 階段／10 項工作'
-        : '不建立策略工作'
-    alert(`專案建立完成：${strategyLabel}；新品執行管理 9 大工作區／${EXECUTION_TASK_COUNT} 項工作。`)
+    alert(`專案建立完成：產品資料表＋AI 策略決策工作區；新品執行管理 9 大工作區／${EXECUTION_TASK_COUNT} 項工作。`)
   }
 
   async function upgradeSelectedProjectTemplate() {
@@ -616,7 +570,7 @@ export default function Home() {
 
   return <main className="page"><div className="shell">
     <Header right={REQUIRE_AUTH&&session?<div className="login-user"><span><b>{currentEmployee?.name||session.user.email}</b><small>{currentEmployee?.role||''}</small></span><button className="btn" onClick={()=>supabase.auth.signOut()}>登出</button></div>:null}/>
-    <div className="page-title-row"><div><h1>新品管理平台</h1><p>品牌新品使用完整策略／執行流程；1688 新品使用簡化上架流程</p></div><div className="actions">{isManager&&<button className="btn" onClick={()=>setView('employees')}>員工管理</button>}{isManager&&<button className="btn" onClick={()=>setView('template')}>執行模板設定</button>}{isManager&&<button className="btn-primary" onClick={()=>setShowNewProject(true)}>＋ 新增專案</button>}</div></div>
+    <div className="page-title-row"><div><h1>新品管理平台</h1><p>品牌新品使用產品資料、AI 策略決策與執行流程；1688 新品使用簡化上架流程</p></div><div className="actions">{isManager&&<button className="btn" onClick={()=>setView('employees')}>員工管理</button>}{isManager&&<button className="btn" onClick={()=>setView('template')}>執行模板設定</button>}{isManager&&<button className="btn-primary" onClick={()=>setShowNewProject(true)}>＋ 新增專案</button>}</div></div>
 
     <section className="project-dashboard-v2">
       <div className="project-status-row"><b>品牌新品專案</b><Stat label="規劃中" value={statusCount(brandProjects,'規劃中')}/><Stat label="進行中" value={statusCount(brandProjects,'進行中')}/><Stat label="已逾期" value={overdueProjectCount(brandProjects)} danger={overdueProjectCount(brandProjects)>0}/><Stat label="已結案" value={statusCount(brandProjects,'已結案')}/></div>
@@ -794,7 +748,7 @@ function EmployeeView({employees,onBack,onAdd,onUpdate}:{employees:Employee[];on
 
 function NewProjectModal({data,setData,employees,onClose,onCreate}:{data:NewProjectForm;setData:(x:NewProjectForm)=>void;employees:Employee[];onClose:()=>void;onCreate:()=>void}) {
   const is1688=data.project_kind==='1688'
-  return <div className="modal-bg"><div className="modal"><div className="modal-head"><h2>新增新品專案</h2><button onClick={onClose}>✕</button></div><div className="kind-choice"><button className={data.project_kind==='brand'?'active':''} onClick={()=>setData({...data,project_kind:'brand'})}><b>GUXON 品牌新品</b><small>可選不使用／簡易／完整策略＋執行管理</small></button><button className={data.project_kind==='1688'?'active':''} onClick={()=>setData({...data,project_kind:'1688'})}><b>1688 新品</b><small>簡化上架工作流程</small></button></div><div className="meta-grid"><Field label="專案名稱"><input value={data.name} onChange={e=>setData({...data,name:e.target.value})} placeholder={is1688?'例：1688 磁吸支架':'例：HALO 2 新品上市'}/></Field><Field label="型號"><input value={data.version} onChange={e=>setData({...data,version:e.target.value})}/></Field><Field label="主要負責人"><select value={data.owner_id} onChange={e=>setData({...data,owner_id:e.target.value})}><option value="">未指派</option>{employees.filter(e=>e.active).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select></Field><Field label={is1688?'預計上架日':'上市日 D0'}><input type="date" value={data.launch_date} onChange={e=>setData({...data,launch_date:e.target.value})}/></Field><Field label="正式定價"><input type="number" value={data.retail_price} onChange={e=>setData({...data,retail_price:e.target.value})}/></Field><Field label="團購／活動價"><input type="number" value={data.group_price} onChange={e=>setData({...data,group_price:e.target.value})}/></Field>{!is1688&&<><Field label="策略管理模式"><select value={data.strategy_mode} onChange={e=>setData({...data,strategy_mode:e.target.value as 'none'|'simple'|'full'})}>{STRATEGY_MODES.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}</select></Field><Field label="本輪預算版本"><select value={data.budget_version} onChange={e=>setData({...data,budget_version:e.target.value})}>{BUDGETS.map(x=><option key={x} value={x}>{x||'未決定'}</option>)}</select></Field><Field label="本輪性質"><select value={data.project_type} onChange={e=>setData({...data,project_type:e.target.value})}>{PROJECT_TYPES.map(x=><option key={x} value={x}>{x||'未決定'}</option>)}</select></Field></>}{is1688&&<Field label="網址" wide><input value={data.product_url} onChange={e=>setData({...data,product_url:e.target.value})} placeholder="https://..."/></Field>}<Field label="備註" wide><textarea value={data.notes} onChange={e=>setData({...data,notes:e.target.value})} placeholder="專案備註"/></Field><Field label="專案狀態"><select value={data.status} onChange={e=>setData({...data,status:e.target.value})}>{PROJECT_STATUS.map(x=><option key={x}>{x}</option>)}</select></Field>{!is1688&&<Field label="本輪成功定義" wide><input value={data.success_goal} onChange={e=>setData({...data,success_goal:e.target.value})}/></Field>}</div><div className={`template-note ${is1688?'simple-template-note':''}`}>{is1688?<><b>1688 簡易新品模板</b><p>建立後會依「執行模板設定」中目前啟用的 1688 工作項目，自動產生上架流程。</p></>:<><b>{STRATEGY_MODES.find(x=>x.value===data.strategy_mode)?.label || '簡易策略'}＋新品執行管理</b><p>{STRATEGY_MODES.find(x=>x.value===data.strategy_mode)?.description} 新品執行管理仍會自動建立 9 大工作區／68 項跨部門工作。</p></>}</div><div className="modal-actions"><button className="btn" onClick={onClose}>取消</button><button className="btn-primary" onClick={onCreate}>建立專案</button></div></div></div>
+  return <div className="modal-bg"><div className="modal"><div className="modal-head"><h2>新增新品專案</h2><button onClick={onClose}>✕</button></div><div className="kind-choice"><button className={data.project_kind==='brand'?'active':''} onClick={()=>setData({...data,project_kind:'brand'})}><b>GUXON 品牌新品</b><small>產品資料＋AI 策略決策＋新品執行管理</small></button><button className={data.project_kind==='1688'?'active':''} onClick={()=>setData({...data,project_kind:'1688'})}><b>1688 新品</b><small>簡化上架工作流程</small></button></div><div className="meta-grid"><Field label="專案名稱"><input value={data.name} onChange={e=>setData({...data,name:e.target.value})} placeholder={is1688?'例：1688 磁吸支架':'例：HALO 2 新品上市'}/></Field><Field label="型號"><input value={data.version} onChange={e=>setData({...data,version:e.target.value})}/></Field><Field label="主要負責人"><select value={data.owner_id} onChange={e=>setData({...data,owner_id:e.target.value})}><option value="">未指派</option>{employees.filter(e=>e.active).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select></Field><Field label={is1688?'預計上架日':'上市日 D0'}><input type="date" value={data.launch_date} onChange={e=>setData({...data,launch_date:e.target.value})}/></Field><Field label="正式定價"><input type="number" value={data.retail_price} onChange={e=>setData({...data,retail_price:e.target.value})}/></Field><Field label="團購／活動價"><input type="number" value={data.group_price} onChange={e=>setData({...data,group_price:e.target.value})}/></Field>{!is1688&&<><Field label="本輪預算版本"><select value={data.budget_version} onChange={e=>setData({...data,budget_version:e.target.value})}>{BUDGETS.map(x=><option key={x} value={x}>{x||'未決定'}</option>)}</select></Field><Field label="本輪性質"><select value={data.project_type} onChange={e=>setData({...data,project_type:e.target.value})}>{PROJECT_TYPES.map(x=><option key={x} value={x}>{x||'未決定'}</option>)}</select></Field></>}{is1688&&<Field label="網址" wide><input value={data.product_url} onChange={e=>setData({...data,product_url:e.target.value})} placeholder="https://..."/></Field>}<Field label="備註" wide><textarea value={data.notes} onChange={e=>setData({...data,notes:e.target.value})} placeholder="專案備註"/></Field><Field label="專案狀態"><select value={data.status} onChange={e=>setData({...data,status:e.target.value})}>{PROJECT_STATUS.map(x=><option key={x}>{x}</option>)}</select></Field>{!is1688&&<Field label="本輪成功定義" wide><input value={data.success_goal} onChange={e=>setData({...data,success_goal:e.target.value})}/></Field>}</div><div className={`template-note ${is1688?'simple-template-note':''}`}>{is1688?<><b>1688 簡易新品模板</b><p>建立後會依「執行模板設定」中目前啟用的 1688 工作項目，自動產生上架流程。</p></>:<><b>品牌新品標準流程</b><p>建立後使用「產品資料表 → AI 策略決策 → 新品執行管理」。策略不再建立另一套任務；新品執行管理仍依模板自動建立 9 大工作區。</p></>}</div><div className="modal-actions"><button className="btn" onClick={onClose}>取消</button><button className="btn-primary" onClick={onCreate}>建立專案</button></div></div></div>
 }
 
 function MyTaskList({items,projects,onOpen}:{items:Array<{key:string;id:number;project_id:number;container_id:number|null;title:string;due_date:string|null;assignee_id:number|null;status:string;source:'策略'|'執行'}>;projects:Project[];onOpen:(t:{id:number;project_id:number;container_id:number|null;source:'策略'|'執行'})=>void}) {
