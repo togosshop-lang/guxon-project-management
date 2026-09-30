@@ -1,4 +1,4 @@
-name: Apply strategy data sync v1
+name: Apply project card stage status v1
 on:
   push:
     paths:
@@ -13,13 +13,13 @@ jobs:
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder-publishable-key
     steps:
       - uses: actions/checkout@v4
-      - run: python scripts/apply_strategy_data_sync_v1.py
+      - run: python scripts/apply_project_card_stage_status_v1.py
       - run: npm ci
       - run: npm run build
       - run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add 'app/strategy/[projectId]/page.tsx'
+          git add app/page.tsx app/globals.css
           git diff --cached --quiet && exit 0
-          git commit -m "Sync product data into strategy context"
+          git commit -m "Show three-stage status on brand project cards"
           git push
