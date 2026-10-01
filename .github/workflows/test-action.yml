@@ -1,4 +1,4 @@
-name: Cleanup validation
+name: Final legacy cleanup validation
 on:
   push:
     paths:
@@ -21,5 +21,5 @@ jobs:
           git config user.email github-actions@github.com
           git add app/page.tsx
           git diff --cached --quiet && exit 0
-          git commit -m "Clean legacy template code"
+          git commit -m "Remove remaining legacy template upgrade prop"
           git push
