@@ -1,4 +1,4 @@
-name: Remove legacy template upgrade
+name: Remove legacy template upgrade retry
 on:
   push:
     paths:
