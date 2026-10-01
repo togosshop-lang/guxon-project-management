@@ -1,4 +1,4 @@
-name: Final ProjectView cleanup
+name: Performance metrics upgrade
 on:
   push:
     paths:
@@ -13,7 +13,7 @@ jobs:
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder-publishable-key
     steps:
       - uses: actions/checkout@v4
-      - run: python scripts/remove_legacy_upgrade_v1.py
+      - run: python scripts/apply_performance_metrics_v1.py
       - run: npm ci
       - run: npm run build
       - run: |
@@ -21,5 +21,5 @@ jobs:
           git config user.email github-actions@github.com
           git add app/page.tsx
           git diff --cached --quiet && exit 0
-          git commit -m "Remove remaining legacy template upgrade prop"
+          git commit -m "Add current and historical overdue performance metrics"
           git push
