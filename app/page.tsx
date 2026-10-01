@@ -14,49 +14,6 @@ const PRIORITIES = ['高', '中', '低']
 const PROJECT_STATUS = ['規劃中', '進行中', '已上市', '已結案', '暫停']
 const BUDGETS = ['', '保守測試 3–5 萬', '標準上市 8–15 萬', '加速放大 20–30 萬+']
 const PROJECT_TYPES = ['', '小額測試', '完整上市', '放大期']
-const STRATEGY_MODES = [
-  { value:'none', label:'不使用策略', description:'不建立策略任務，只建立新品執行管理。' },
-  { value:'simple', label:'簡易策略', description:'建立約 10 項核心策略工作，適合一般新品快速上市。' },
-  { value:'full', label:'完整策略', description:'建立完整 6 階段／41 項策略工作。' },
-] as const
-
-const SIMPLE_STRATEGY_TEMPLATE = [
-  {
-    name:'商品定位',
-    description:'快速確認商品定位與市場基本條件',
-    tasks:[
-      { title:'確認目標客群', description:'確認這個商品主要賣給誰，以及最核心的使用情境。', ownerDepartment:'行銷', dueOffset:-45 },
-      { title:'確認核心賣點', description:'整理最重要的 1～3 個購買理由與差異化。', ownerDepartment:'行銷', dueOffset:-42 },
-      { title:'競品／市場簡易確認', description:'快速確認主要競品、價格帶與市場常見賣點。', ownerDepartment:'行銷', dueOffset:-40 },
-    ]
-  },
-  {
-    name:'商業策略',
-    description:'確認價格與主要銷售通路',
-    tasks:[
-      { title:'確認正式售價', description:'確認正式售價、團購／活動價格與基本毛利條件。', ownerDepartment:'負責人', dueOffset:-35 },
-      { title:'確認通路策略', description:'確認官網、蝦皮、經銷、團購等主要銷售方式。', ownerDepartment:'負責人', dueOffset:-32 },
-    ]
-  },
-  {
-    name:'行銷準備',
-    description:'確認上市主要溝通與素材方向',
-    tasks:[
-      { title:'確認主打溝通方向', description:'確認上市時最主要要對消費者說什麼。', ownerDepartment:'行銷', dueOffset:-28 },
-      { title:'確認素材需求', description:'確認商品圖、影片、KOL、社群等素材需求。', ownerDepartment:'行銷', dueOffset:-25 },
-      { title:'確認上市活動', description:'確認首發優惠、組合、贈品或其他上市活動。', ownerDepartment:'行銷', dueOffset:-18 },
-    ]
-  },
-  {
-    name:'上市確認',
-    description:'上市前後快速確認',
-    tasks:[
-      { title:'上市前最終確認', description:'確認商品頁、庫存、價格、素材與通路都已準備完成。', ownerDepartment:'負責人', dueOffset:-3 },
-      { title:'上市成效追蹤', description:'上市後追蹤銷售、廣告與消費者反應，確認是否需要調整。', ownerDepartment:'行銷', dueOffset:7 },
-    ]
-  },
-]
-
 const SIMPLE_1688_TASKS = [
   { title:'到貨清點', description:'確認到貨數量、款式、顏色與外觀是否正常。', dueOffset:-14 },
   { title:'貨號建立', description:'建立內部貨號／SKU，確認品名與規格。', dueOffset:-10 },
@@ -69,7 +26,7 @@ const REQUIRE_AUTH = process.env.NEXT_PUBLIC_REQUIRE_AUTH === 'true'
 type NewProjectForm = {
   name:string; version:string; owner_id:string; launch_date:string; retail_price:string; group_price:string;
   status:string; budget_version:string; project_type:string; project_kind:'brand'|'1688'; success_goal:string;
-  product_url:string; notes:string; strategy_mode:'none'|'simple'|'full'
+  product_url:string; notes:string
 }
 type TaskInsert = Omit<Task, 'id'|'created_at'|'updated_at'>
 type GateInsert = Omit<StageGate, 'id'>
@@ -107,7 +64,7 @@ export default function Home() {
   const [newProject, setNewProject] = useState<NewProjectForm>({
     name:'', version:'v1.0', owner_id:'', launch_date:'', retail_price:'', group_price:'',
     status:'規劃中', budget_version:'', project_type:'', project_kind:'brand', success_goal:'',
-    product_url:'', notes:'', strategy_mode:'simple'
+    product_url:'', notes:''
   })
 
   useEffect(() => {
@@ -335,7 +292,7 @@ export default function Home() {
       const result=await create1688Template(project as Project,ownerId)
       if(result.error) return alert('建立 1688 流程失敗：'+result.error)
       setShowNewProject(false)
-      setNewProject({name:'',version:'v1.0',owner_id:'',launch_date:'',retail_price:'',group_price:'',status:'規劃中',budget_version:'',project_type:'',project_kind:'brand',success_goal:'',product_url:'',notes:'',strategy_mode:'simple'})
+      setNewProject({name:'',version:'v1.0',owner_id:'',launch_date:'',retail_price:'',group_price:'',status:'規劃中',budget_version:'',project_type:'',project_kind:'brand',success_goal:'',product_url:'',notes:''})
       await loadAll(false)
       setSelectedProjectId(project.id)
       alert('1688 新品專案建立完成：已依目前的 1688 模板自動產生工作流程。')
@@ -344,7 +301,7 @@ export default function Home() {
 
     // 品牌新品的策略改由 AI 策略決策工作區管理，不再建立舊版策略任務。
     setShowNewProject(false)
-    setNewProject({name:'',version:'v1.0',owner_id:'',launch_date:'',retail_price:'',group_price:'',status:'規劃中',budget_version:'',project_type:'',project_kind:'brand',success_goal:'',product_url:'',notes:'',strategy_mode:'simple'})
+    setNewProject({name:'',version:'v1.0',owner_id:'',launch_date:'',retail_price:'',group_price:'',status:'規劃中',budget_version:'',project_type:'',project_kind:'brand',success_goal:'',product_url:'',notes:''})
     await createExecutionTemplate(project as Project, true)
     await loadAll(false)
     setSelectedProjectId(project.id)
