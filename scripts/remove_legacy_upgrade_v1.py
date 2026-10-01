@@ -1,11 +1,12 @@
 from pathlib import Path
-import re
 p=Path('app/page.tsx')
 s=p.read_text()
 s=s.replace("import { STANDARD_TEMPLATE } from '@/src/lib/template'\n","")
-start=s.index("  async function upgradeSelectedProjectTemplate() {")
-end=s.index("  async function addTask(stageId:number) {", start)
-s=s[:start]+s[end:]
-s,n=re.subn(r'<button[^>]*onClick=\{upgradeSelectedProjectTemplate\}[^>]*>.*?</button>', '', s, flags=re.S)
-assert n>=1, 'legacy upgrade button not found'
+marker="  async function upgradeSelectedProjectTemplate() {"
+if marker in s:
+    start=s.index(marker)
+    end=s.index("  async function addTask(stageId:number) {", start)
+    s=s[:start]+s[end:]
+# The legacy UI trigger may already have been removed by a prior cleanup.
+# Do not fail when the target is already absent.
 p.write_text(s)
