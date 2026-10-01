@@ -48,6 +48,7 @@ export default function Home() {
   const [templateDefaults, setTemplateDefaults] = useState<ExecutionTemplateDefault[]>([])
   const [productSheets, setProductSheets] = useState<any[]>([])
   const [strategyItems, setStrategyItems] = useState<any[]>([])
+  const [performanceResetAt,setPerformanceResetAt]=useState<string|null>(null)
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'dashboard'|'employees'|'template'>('dashboard')
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null)
@@ -91,7 +92,7 @@ export default function Home() {
 
   async function loadAll(showLoading = true) {
     if (showLoading) setLoading(true)
-    const [p,s,t,g,e,xs,xt,xd,ps,si] = await Promise.all([
+    const [p,s,t,g,e,xs,xt,xd,ps,si,settings] = await Promise.all([
       supabase.from('projects').select('*').order('id',{ascending:false}),
       supabase.from('stages').select('*').order('sort_order'),
       supabase.from('tasks').select('*').order('sort_order'),
@@ -102,6 +103,7 @@ export default function Home() {
       supabase.from('execution_template_defaults').select('*').order('task_title'),
       supabase.from('product_data_sheets').select('project_id,completed,updated_at'),
       supabase.from('strategy_items').select('project_id,source_status'),
+      supabase.from('app_settings').select('key,value').eq('key','performance_reset').maybeSingle(),
     ])
     const err = p.error || s.error || t.error || g.error || e.error || xs.error || xt.error || xd.error || ps.error || si.error
     if (err) console.error(err)
@@ -115,6 +117,7 @@ export default function Home() {
     if (!xd.error) setTemplateDefaults((xd.data||[]) as ExecutionTemplateDefault[])
     if (!ps.error) setProductSheets(ps.data||[])
     if (!si.error) setStrategyItems(si.data||[])
+    if (!settings.error) setPerformanceResetAt((settings.data?.value as any)?.reset_at||null)
     setLoading(false)
   }
 
@@ -465,14 +468,36 @@ export default function Home() {
   const overdueProjectCount=(list:Project[])=>list.filter(projectIsOverdue).length
   const productDataDone=(projectId:number)=>productSheets.some(x=>x.project_id===projectId&&x.completed)
   const strategyDecisionProgress=(projectId:number)=>{const list=strategyItems.filter(x=>x.project_id===projectId);return {total:list.length,done:list.filter(x=>x.source_status==='已確認').length,complete:list.length>0&&list.every(x=>x.source_status==='已確認')}}
+  const resetDate=performanceResetAt?.slice(0,10)||null
   const employeePerformance=employees.filter(e=>e.active).map(e=>{
     const assigned=executionTasks.filter(t=>t.assignee_id===e.id&&t.status!=='不適用')
     const currentOverdue=assigned.filter(t=>t.due_date&&t.due_date<todayIso()&&!isDone(t.status))
-    const overdueDays=currentOverdue.reduce((sum,t)=>sum+Math.max(0,-daysFromToday(t.due_date!)),0)
+    const overdueDays=currentOverdue.reduce((sum,t)=>{
+      const start=resetDate && resetDate>t.due_date! ? resetDate : t.due_date!
+      return sum+Math.max(0,-daysFromToday(start))
+    },0)
     const done=assigned.filter(t=>isDone(t.status))
-    const onTime=done.filter(t=>!t.due_date || (t.updated_at||'').slice(0,10)<=t.due_date).length
-    return {employee:e,assigned:assigned.length,done:done.length,currentOverdue:currentOverdue.length,overdueDays,onTimeRate:done.length?Math.round(onTime/done.length*100):0}
+    const periodDone=done.filter(t=>!resetDate || (t.updated_at||'').slice(0,10)>=resetDate)
+    const onTime=periodDone.filter(t=>!t.due_date || (t.updated_at||'').slice(0,10)<=t.due_date).length
+    const lateDone=periodDone.filter(t=>t.due_date && (t.updated_at||'').slice(0,10)>t.due_date)
+    const historicalOverdueDays=lateDone.reduce((sum,t)=>{
+      const completed=(t.updated_at||'').slice(0,10)
+      const start=resetDate && resetDate>t.due_date! ? resetDate : t.due_date!
+      if(!completed||completed<=start) return sum
+      return sum+Math.max(0,Math.round((new Date(completed+'T00:00:00').getTime()-new Date(start+'T00:00:00').getTime())/86400000))
+    },0)
+    return {employee:e,assigned:assigned.length,done:done.length,currentOverdue:currentOverdue.length,overdueDays,periodDone:periodDone.length,lateDone:lateDone.length,historicalOverdueDays,onTimeRate:periodDone.length?Math.round(onTime/periodDone.length*100):0}
   })
+  const isBoss=!REQUIRE_AUTH || currentEmployee?.role==='admin'
+  async function resetPerformanceOverdue() {
+    if(!isBoss) return
+    if(!window.confirm('確定要重置逾期績效起算日嗎？重置後，先前累積的逾期天數不再列入績效統計。')) return
+    const now=new Date().toISOString()
+    const {error}=await supabase.from('app_settings').upsert({key:'performance_reset',value:{reset_at:now},updated_at:now,updated_by:currentEmployee?.id||null},{onConflict:'key'})
+    if(error) return alert('重置失敗：'+error.message)
+    setPerformanceResetAt(now)
+    alert('逾期績效已重置，從今天重新計算。')
+  }
 
   useEffect(()=>{const onPop=()=>{setFocusTask(null);setSelectedProjectId(null)};window.addEventListener('popstate',onPop);return()=>window.removeEventListener('popstate',onPop)},[])
   function openProject(projectId:number){window.history.pushState({projectId},'',`?project=${projectId}`);setSelectedProjectId(projectId)}
@@ -508,7 +533,7 @@ export default function Home() {
         <Attention title="逾期" items={overdue} employees={employees} projects={projects}/><Attention title="7 天內到期" items={dueSoon} employees={employees} projects={projects}/><Attention title="卡關" items={blocked} employees={employees} projects={projects}/>
         <MyTaskList items={myTasks} projects={projects} onOpen={t=>setEditingDashboardTask({source:t.source,id:t.id})}/>
       </div>
-      <div className="panel"><div className="panel-head"><b>團隊工作狀況</b><small>目前執行狀況，供管理與績效參考</small></div><div className="team-performance">{employeePerformance.map(x=><div className="performance-row" key={x.employee.id}><div className="performance-person"><b>{x.employee.name}</b><small>{x.employee.department||'未設定職務'}</small></div><div className="performance-metric"><small>完成任務</small><b>{x.done}/{x.assigned}</b></div><div className="performance-metric"><small>準時率</small><b>{x.onTimeRate}%</b></div><div className="performance-metric"><small>逾期任務</small><b className={x.currentOverdue>0?'danger-text':''}>{x.currentOverdue}</b></div><div className="performance-metric"><small>目前逾期總天數</small><b className={x.overdueDays>0?'danger-text':''}>{x.overdueDays} 天</b></div></div>)}</div><p className="performance-note">逾期天數僅計算目前尚未完成且已超過期限的執行任務；完成後不再累加於此數字。</p></div>
+      <div className="panel"><div className="panel-head"><div><b>團隊工作狀況</b><small>目前工作狀況＋重置後歷史績效</small></div>{isBoss&&<button className="btn" onClick={resetPerformanceOverdue}>重置逾期天數</button>}</div>{resetDate&&<p className="performance-note">績效起算日：{resetDate}</p>}<div className="team-performance">{employeePerformance.map(x=><div className="performance-row" key={x.employee.id}><div className="performance-person"><b>{x.employee.name}</b><small>{x.employee.department||'未設定職務'}</small></div><div className="performance-metric"><small>目前逾期</small><b className={x.currentOverdue>0?'danger-text':''}>{x.currentOverdue} 件／{x.overdueDays} 天</b></div><div className="performance-metric"><small>期間完成</small><b>{x.periodDone} 件</b></div><div className="performance-metric"><small>逾期完成</small><b className={x.lateDone>0?'danger-text':''}>{x.lateDone} 件／{x.historicalOverdueDays} 天</b></div><div className="performance-metric"><small>準時率</small><b>{x.onTimeRate}%</b></div></div>)}</div><p className="performance-note">目前逾期＝尚未完成的執行任務；歷史績效＝起算日後完成的執行任務。策略決策不列入員工逾期績效。</p></div>
     </section>
 
     <div className="filters"><input placeholder="搜尋專案名稱或型號…" value={query} onChange={e=>setQuery(e.target.value)}/><select value={kindFilter} onChange={e=>changeKindFilter(e.target.value)}><option value="全部">全部類型</option><option value="brand">GUXON 品牌新品</option><option value="1688">1688 新品</option></select><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option>全部</option>{PROJECT_STATUS.map(x=><option key={x}>{x}</option>)}</select></div>
