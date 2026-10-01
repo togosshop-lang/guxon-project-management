@@ -1,4 +1,4 @@
-name: Code cleanup
+name: Code cleanup retry
 on:
   push:
     paths:
