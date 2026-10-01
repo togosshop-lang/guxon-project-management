@@ -7,6 +7,5 @@ if marker in s:
     start=s.index(marker)
     end=s.index("  async function addTask(stageId:number) {", start)
     s=s[:start]+s[end:]
-# The legacy UI trigger may already have been removed by a prior cleanup.
-# Do not fail when the target is already absent.
+s=s.replace(" onUpgradeTemplate={upgradeSelectedProjectTemplate}","")
 p.write_text(s)
