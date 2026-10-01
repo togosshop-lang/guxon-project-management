@@ -1,4 +1,4 @@
-name: Final legacy cleanup validation
+name: Final ProjectView cleanup
 on:
   push:
     paths:
