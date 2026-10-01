@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/src/lib/supabase'
-import { STANDARD_TEMPLATE } from '@/src/lib/template'
 import { EXECUTION_TEMPLATE, EXECUTION_TASK_COUNT } from '@/src/lib/execution-template'
 import { addDays, dLabel, daysFromToday, todayIso } from '@/src/lib/date'
 import type { Employee, ExecutionSection, ExecutionTask, ExecutionTemplateDefault, Project, Stage, StageGate, Task } from '@/src/lib/types'
@@ -308,40 +307,6 @@ export default function Home() {
     alert(`專案建立完成：產品資料表＋AI 策略決策工作區；新品執行管理 9 大工作區／${EXECUTION_TASK_COUNT} 項工作。`)
   }
 
-  async function upgradeSelectedProjectTemplate() {
-    if (!selectedProject) return
-    if (!confirm('要補齊完整標準模板嗎？\n\n不會刪除現有任務，只會新增缺少的標準任務與通關檢核。')) return
-    const resolvedStages: Stage[] = []
-    for (let i=0;i<STANDARD_TEMPLATE.length;i++) {
-      const tpl=STANDARD_TEMPLATE[i]
-      let stage=stages.find(x=>x.project_id===selectedProject.id && x.stage_number===i+1)
-      if (!stage) {
-        const {data,error}=await supabase.from('stages').insert({project_id:selectedProject.id,stage_number:i+1,name:tpl.name,description:`${tpl.range} ｜ ${tpl.description}`,status:'未開始',sort_order:i+1,approval_note:null}).select().single()
-        if(error||!data) return alert('補齊階段失敗：'+(error?.message||''))
-        stage=data as Stage
-      }
-      resolvedStages.push(stage)
-    }
-    const missingTasks:TaskInsert[]=[]; const missingGates:GateInsert[]=[]
-    resolvedStages.forEach((stage,i)=>{
-      const existingTasks=tasks.filter(t=>t.project_id===selectedProject.id&&t.stage_id===stage.id)
-      const existingGates=gates.filter(g=>g.project_id===selectedProject.id&&g.stage_id===stage.id)
-      STANDARD_TEMPLATE[i].tasks.forEach((task,j)=>{
-        if(!existingTasks.some(t=>t.title.trim()===task.title.trim())) missingTasks.push({project_id:selectedProject.id,stage_id:stage.id,assignee_id:departmentAssignee(task.ownerDepartment,selectedProject.owner_id),title:task.title,description:task.description,status:'未開始',due_date:addDays(selectedProject.launch_date,task.dueOffset),due_offset:task.dueOffset,note:null,sort_order:existingTasks.length+j+1})
-      })
-      STANDARD_TEMPLATE[i].gates.forEach((label,j)=>{
-        if(!existingGates.some(g=>g.label.trim()===label.trim())) missingGates.push({project_id:selectedProject.id,stage_id:stage.id,label,checked:false,sort_order:j+1})
-      })
-    })
-    const [tr,gr]=await Promise.all([
-      missingTasks.length?supabase.from('tasks').insert(missingTasks):Promise.resolve({error:null}),
-      missingGates.length?supabase.from('stage_gates').insert(missingGates):Promise.resolve({error:null}),
-    ])
-    if(tr.error||gr.error) return alert('補齊模板失敗：'+(tr.error?.message||gr.error?.message||''))
-    await loadAll(false)
-    alert(`補齊完成：新增 ${missingTasks.length} 個標準任務、${missingGates.length} 個通關檢核。`)
-  }
-
   async function addTask(stageId:number) {
     if(!selectedProject) return
     const title=prompt('工作項目名稱')?.trim(); if(!title) return
@@ -527,7 +492,7 @@ export default function Home() {
   if(REQUIRE_AUTH && session && !currentEmployee) return <AccessDeniedScreen email={session.user.email||''} />
   if(view==='employees') return <EmployeeView employees={employees} onBack={()=>setView('dashboard')} onAdd={addEmployee} onUpdate={updateEmployee} />
   if(view==='template') return <TemplateSettingsView employees={employees} defaults={templateDefaults} onBack={()=>setView('dashboard')} onSave={saveTemplateDefault} onAdd1688={add1688TemplateItem} onDelete1688={delete1688TemplateItem} />
-  if(selectedProject) return <ProjectView project={selectedProject} stages={projectStages} tasks={projectTasks} gates={projectGates} executionSections={projectExecutionSections} executionTasks={projectExecutionTasks} employees={employees} expanded={expanded} setExpanded={setExpanded} focusTask={focusTask} onBack={closeProject} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateStage={updateStage} onToggleGate={toggleGate} onAddTask={addTask} onDeleteTask={deleteTask} onDeleteProject={deleteProject} onUpgradeTemplate={upgradeSelectedProjectTemplate} onCreateExecutionTemplate={()=>createExecutionTemplate(selectedProject)} onUpdateExecutionTask={updateExecutionTask} onAddExecutionTask={addExecutionTask} onDeleteExecutionTask={deleteExecutionTask} onRescheduleExecution={()=>rescheduleExecution(selectedProject)} />
+  if(selectedProject) return <ProjectView project={selectedProject} stages={projectStages} tasks={projectTasks} gates={projectGates} executionSections={projectExecutionSections} executionTasks={projectExecutionTasks} employees={employees} expanded={expanded} setExpanded={setExpanded} focusTask={focusTask} onBack={closeProject} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateStage={updateStage} onToggleGate={toggleGate} onAddTask={addTask} onDeleteTask={deleteTask} onDeleteProject={deleteProject} onCreateExecutionTemplate={()=>createExecutionTemplate(selectedProject)} onUpdateExecutionTask={updateExecutionTask} onAddExecutionTask={addExecutionTask} onDeleteExecutionTask={deleteExecutionTask} onRescheduleExecution={()=>rescheduleExecution(selectedProject)} />
 
   return <main className="page"><div className="shell">
     <Header right={REQUIRE_AUTH&&session?<div className="login-user"><span><b>{currentEmployee?.name||session.user.email}</b><small>{currentEmployee?.role||''}</small></span><button className="btn" onClick={()=>supabase.auth.signOut()}>登出</button></div>:null}/>
@@ -568,7 +533,7 @@ type ProjectViewProps = {
   focusTask:{source:'策略'|'執行';id:number;project_id:number;container_id:number|null}|null;
   onBack:()=>void; onUpdateProject:(id:number,p:Partial<Project>)=>void; onUpdateTask:(id:number,p:Partial<Task>)=>void;
   onUpdateStage:(id:number,p:Partial<Stage>)=>void; onToggleGate:(g:StageGate,c:boolean)=>void; onAddTask:(stageId:number)=>void;
-  onDeleteTask:(id:number)=>void; onDeleteProject:(p:Project)=>void; onUpgradeTemplate:()=>void; onCreateExecutionTemplate:()=>void;
+  onDeleteTask:(id:number)=>void; onDeleteProject:(p:Project)=>void; onCreateExecutionTemplate:()=>void;
   onUpdateExecutionTask:(id:number,p:Partial<ExecutionTask>)=>void; onAddExecutionTask:(sectionId:number)=>void; onDeleteExecutionTask:(id:number)=>void;
   onRescheduleExecution:()=>void
 }
