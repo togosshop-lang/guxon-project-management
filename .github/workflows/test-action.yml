@@ -1,4 +1,4 @@
-name: Apply verified legacy strategy cleanup
+name: Remove legacy template upgrade
 on:
   push:
     paths:
@@ -13,7 +13,7 @@ jobs:
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder-publishable-key
     steps:
       - uses: actions/checkout@v4
-      - run: python scripts/cleanup_legacy_strategy_v1.py
+      - run: python scripts/remove_legacy_upgrade_v1.py
       - run: npm ci
       - run: npm run build
       - run: |
@@ -21,5 +21,5 @@ jobs:
           git config user.email github-actions@github.com
           git add app/page.tsx
           git diff --cached --quiet && exit 0
-          git commit -m "Remove deprecated strategy modes and templates"
+          git commit -m "Remove legacy template upgrade path"
           git push
