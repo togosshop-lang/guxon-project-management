@@ -5,6 +5,7 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/src/lib/supabase'
 import { EXECUTION_TEMPLATE, EXECUTION_TASK_COUNT } from '@/src/lib/execution-template'
 import { addDays, dLabel, daysFromToday, todayIso } from '@/src/lib/date'
+import ProductDataPanel from './components/ProductDataPanel'
 import type { Employee, ExecutionSection, ExecutionTask, ExecutionTemplateDefault, Project, Stage, StageGate, Task } from '@/src/lib/types'
 
 const TASK_STATUS = ['未開始', '進行中', '待審', '已完成', '卡關']
@@ -600,6 +601,7 @@ function StrategyProjectView(props:ProjectViewProps & {onOpenExecution:()=>void}
       <Field label="產品／參考網址" wide><DebouncedInput value={(project as any).product_url||''} onSave={v=>props.onUpdateProject(project.id,{product_url:v||null} as any)} placeholder="https://..."/></Field>
       <Field label="備註" wide><DebouncedTextarea value={(project as any).notes||''} onSave={v=>props.onUpdateProject(project.id,{notes:v||null} as any)} placeholder="專案備註"/></Field>
     </div></section>
+    <ProductDataPanel projectId={project.id} projectName={project.name} model={project.version}/>
     <section className="overall"><div><b>新品策略管理</b><p>這裡只管理策略決策，不再建立第二套執行任務。</p></div><div style={{display:'flex',alignItems:'center',gap:12}}><span style={{fontSize:14,color:'#6b7280'}}>完成期限 {(project as any).strategy_due_date||'未設定'}</span><label className={`strategy-complete-toggle ${strategyCompleted?'is-complete':''}`}><input type="checkbox" checked={strategyCompleted} onChange={e=>setStrategyCompleted(e.target.checked)}/><b>{strategyCompleted?'策略已完成':'勾選整體策略已完成'}</b></label></div></section>
     {strategyCompleted&&<div className="alert ok"><b>✓ 此商品策略已完成</b><p>{(project as any).strategy_completed_at?`完成時間：${new Date((project as any).strategy_completed_at).toLocaleString('zh-TW')}`:'已完成策略確認。'}</p></div>}
     <div className="alert ok"><b>策略與執行已分開</b><p>策略確認「做什麼、為什麼做」；日期、負責人、製作、上架、KOL、廣告等工作全部由「新品執行管理」追蹤。</p></div>
