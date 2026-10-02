@@ -61,3 +61,17 @@
 .product-data-section.internal{background:#fffaf0;margin:10px -20px -16px;padding:18px 20px;border-top:1px solid #fde7bd}.product-list{display:grid;gap:8px}.product-list-head,.product-list-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr)) auto;gap:8px;align-items:start}.product-list-head{padding-right:56px;font-size:12px;color:#64748b}.product-list-head b:only-child{grid-column:1/3}.product-list-row textarea:only-of-type{grid-column:1/3}
 .product-data-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-top:18px}.product-data-actions>div{display:flex;gap:8px}
 @media(max-width:760px){.product-data-grid{grid-template-columns:1fr}.product-data-head,.product-data-actions{align-items:flex-start;flex-direction:column}.product-data-status{text-align:left}.product-list-head,.product-list-row{grid-template-columns:1fr}.product-list-head b:only-child,.product-list-row textarea:only-of-type{grid-column:auto}}
+
+.project-card-title-wrap{display:flex;align-items:center;gap:14px;min-width:0}
+.project-thumb{width:72px;height:72px;object-fit:cover;border-radius:12px;border:1px solid #e5e7eb;background:#f8fafc;flex:0 0 auto}
+.project-thumb-empty{display:flex;align-items:center;justify-content:center;font-size:9px;color:#94a3b8;letter-spacing:.08em}
+.strategy-task-card{align-items:flex-start;gap:18px}
+.strategy-task-fields{display:grid;grid-template-columns:repeat(4,minmax(145px,1fr));gap:10px;align-items:end;min-width:min(720px,100%)}
+.strategy-task-fields label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:#cbd5e1}
+.strategy-task-fields input[type="date"],.strategy-task-fields select{min-height:40px;border:1px solid #475569;border-radius:8px;background:#fff;color:#111827;padding:0 10px}
+.strategy-task-fields .strategy-complete-toggle{min-height:40px;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;color:#fff}
+.new-project-image-field{display:flex;align-items:center;gap:12px;min-height:42px}
+.new-project-image-field input[type="file"]{width:100%}
+.new-project-image-field small{white-space:nowrap;color:#64748b}
+@media(max-width:900px){.strategy-task-fields{grid-template-columns:1fr 1fr;min-width:0}.project-thumb{width:58px;height:58px}}
+@media(max-width:600px){.strategy-task-fields{grid-template-columns:1fr}.project-card-title-wrap{align-items:flex-start}}
