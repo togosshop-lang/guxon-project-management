@@ -1,0 +1,17 @@
+name: Editable execution template build
+on:
+  push:
+    branches:
+      - editable-execution-template-v5
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder-publishable-key
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npm run build
