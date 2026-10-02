@@ -186,19 +186,21 @@ export default function Home() {
       const section=sectionByNumber.get(i+1)
       if(!section) return
       sectionTpl.tasks.forEach((task,j)=>{
-        const preset=templateDefaults.find(d=>d.task_title===task.title && ((d as any).project_kind||'brand')==='brand')
-        if(preset && !preset.enabled) return
+        const preset=templateDefaults.find(d=>((d as any).template_key||d.task_title)===task.title && ((d as any).project_kind||'brand')==='brand')
+        if((preset as any)?.archived || (preset && !preset.enabled)) return
         const startOffset=(preset as any)?.default_start_offset ?? task.startOffset
         const dueOffset=(preset as any)?.default_due_offset ?? task.dueOffset
         rows.push({
-        project_id:project.id, section_id:section.id, title:task.title, description:task.description,
+        project_id:project.id, section_id:section.id, title:(preset as any)?.task_title||task.title, description:(preset as any)?.task_description??task.description,
         assignee_id:preset?.default_assignee_id ?? departmentAssignee(task.department,project.owner_id),
         reviewer_id:preset?.default_reviewer_id ?? (task.reviewerDepartment?departmentAssignee(task.reviewerDepartment,project.owner_id):null),
         status:'未開始', priority:preset?.default_priority || task.priority,
         start_date:project.launch_date?addDays(project.launch_date,startOffset):null,
         due_date:project.launch_date?addDays(project.launch_date,dueOffset):null,
-        start_offset:startOffset, due_offset:dueOffset, note:null, sort_order:j+1, depends_on_task_id:null,
+        start_offset:startOffset, due_offset:dueOffset, note:null, sort_order:(preset as any)?.sort_order??j+1, depends_on_task_id:null,
       })})
+      const custom=(templateDefaults as any[]).filter(d=>(d.project_kind||'brand')==='brand'&&d.section_name===sectionTpl.name&&String(d.template_key||'').startsWith('custom-')&&!d.archived&&d.enabled!==false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
+      custom.forEach((d:any,j:number)=>{const startOffset=d.default_start_offset??-7,dueOffset=d.default_due_offset??-1;rows.push({project_id:project.id,section_id:section.id,title:d.task_title,description:d.task_description||null,assignee_id:d.default_assignee_id??null,reviewer_id:d.default_reviewer_id??null,status:'未開始',priority:d.default_priority||'中',start_date:project.launch_date?addDays(project.launch_date,startOffset):null,due_date:project.launch_date?addDays(project.launch_date,dueOffset):null,start_offset:startOffset,due_offset:dueOffset,note:null,sort_order:d.sort_order??100+j,depends_on_task_id:null})})
     })
     const {data:createdTasks,error:taskError}=await supabase.from('execution_tasks').insert(rows).select()
     if(taskError||!createdTasks) { alert('建立執行工作失敗：'+(taskError?.message||'未知錯誤')); return false }
@@ -372,41 +374,23 @@ export default function Home() {
     setEmployees(cur=>cur.map(e=>e.id===id?{...e,...patch}:e))
   }
 
-  async function saveTemplateDefault(taskTitle:string, patch:Partial<ExecutionTemplateDefault> & Record<string,unknown>) {
+  async function saveTemplateDefault(templateKey:string, patch:Partial<ExecutionTemplateDefault> & Record<string,unknown>) {
     const kind=(patch.project_kind as string)||'brand'
-    const current=(templateDefaults as any[]).find(d=>d.task_title===taskTitle && (d.project_kind||'brand')===kind)
-    const payload={
-      task_title:taskTitle,
-      project_kind:kind,
-      default_assignee_id:current?.default_assignee_id??null,
-      default_reviewer_id:current?.default_reviewer_id??null,
-      default_priority:current?.default_priority||'中',
-      default_start_offset:current?.default_start_offset??null,
-      default_due_offset:current?.default_due_offset??null,
-      enabled:current?.enabled??true,
-      ...patch,
-      updated_at:new Date().toISOString(),
-    }
-
-    if(current?.id) {
-      const {data,error}=await supabase
-        .from('execution_template_defaults')
-        .update(payload)
-        .eq('id',current.id)
-        .select()
-        .single()
-      if(error) return alert('模板設定更新失敗：'+error.message)
-      setTemplateDefaults(cur=>[...cur.filter(x=>x.id!==current.id),data as ExecutionTemplateDefault])
-      return
-    }
-
-    const {data,error}=await supabase
-      .from('execution_template_defaults')
-      .insert(payload)
-      .select()
-      .single()
-    if(error) return alert('模板設定新增失敗：'+error.message)
-    setTemplateDefaults(cur=>[...cur,data as ExecutionTemplateDefault])
+    const current=(templateDefaults as any[]).find(d=>(d.template_key||d.task_title)===templateKey && (d.project_kind||'brand')===kind)
+    const payload={template_key:templateKey,task_title:current?.task_title||templateKey,project_kind:kind,default_assignee_id:current?.default_assignee_id??null,default_reviewer_id:current?.default_reviewer_id??null,default_priority:current?.default_priority||'中',default_start_offset:current?.default_start_offset??null,default_due_offset:current?.default_due_offset??null,enabled:current?.enabled??true,archived:current?.archived??false,...patch,updated_at:new Date().toISOString()}
+    if(current?.id){const {data,error}=await supabase.from('execution_template_defaults').update(payload).eq('id',current.id).select().single();if(error)return alert('模板設定更新失敗：'+error.message);setTemplateDefaults(cur=>[...cur.filter(x=>x.id!==current.id),data as ExecutionTemplateDefault]);return}
+    const {data,error}=await supabase.from('execution_template_defaults').insert(payload).select().single();if(error)return alert('模板設定新增失敗：'+error.message);setTemplateDefaults(cur=>[...cur,data as ExecutionTemplateDefault])
+  }
+  async function addBrandTemplateItem(sectionName:string) {
+    const title=prompt('新增工作項目名稱')?.trim();if(!title)return
+    const key='custom-'+Date.now(), list=(templateDefaults as any[]).filter(d=>(d.project_kind||'brand')==='brand'&&d.section_name===sectionName)
+    const sortOrder=Math.max(0,...list.map(d=>Number(d.sort_order)||0))+10
+    const {data,error}=await supabase.from('execution_template_defaults').insert({template_key:key,task_title:title,project_kind:'brand',section_name:sectionName,task_description:'',sort_order:sortOrder,default_assignee_id:null,default_reviewer_id:null,default_priority:'中',default_start_offset:-7,default_due_offset:-1,enabled:true,archived:false,updated_at:new Date().toISOString()}).select().single()
+    if(error)return alert('新增模板項目失敗：'+error.message);setTemplateDefaults(cur=>[...cur,data as ExecutionTemplateDefault])
+  }
+  async function deleteBrandTemplateItem(templateKey:string,title:string) {
+    if(!confirm(`確定從模板刪除「${title}」？\n\n只影響之後新建立的專案，既有專案不會變動。`))return
+    await saveTemplateDefault(templateKey,{project_kind:'brand',archived:true,enabled:false})
   }
 
   async function add1688TemplateItem() {
