@@ -217,9 +217,16 @@ export default function Home() {
   }
 
   async function updateExecutionTask(id:number, patch:Partial<ExecutionTask>) {
-    const {error}=await supabase.from('execution_tasks').update({...patch,updated_at:new Date().toISOString()}).eq('id',id)
+    const current=executionTasks.find(t=>t.id===id)
+    const now=new Date().toISOString()
+    const updatePatch:any={...patch,updated_at:now}
+    if(patch.status!==undefined && current && patch.status!==current.status){
+      if(isDone(patch.status) && !isDone(current.status)) updatePatch.completed_at=now
+      else if(!isDone(patch.status) && isDone(current.status)) updatePatch.completed_at=null
+    }
+    const {error}=await supabase.from('execution_tasks').update(updatePatch).eq('id',id)
     if(error) return alert('更新失敗：'+error.message)
-    setExecutionTasks(cur=>cur.map(t=>t.id===id?{...t,...patch}:t))
+    setExecutionTasks(cur=>cur.map(t=>t.id===id?{...t,...updatePatch}:t))
   }
 
   async function addExecutionTask(sectionId:number) {
@@ -482,14 +489,14 @@ export default function Home() {
     const onTime=periodDone.filter(t=>!t.due_date || (t.updated_at||'').slice(0,10)<=t.due_date).length
     const lateDone=periodDone.filter(t=>t.due_date && (t.updated_at||'').slice(0,10)>t.due_date)
     const historicalOverdueDays=lateDone.reduce((sum,t)=>{
-      const completed=(t.updated_at||'').slice(0,10)
+      const completed=(t.completed_at||t.updated_at||'').slice(0,10)
       const start=resetDate && resetDate>t.due_date! ? resetDate : t.due_date!
       if(!completed||completed<=start) return sum
       return sum+Math.max(0,Math.round((new Date(completed+'T00:00:00').getTime()-new Date(start+'T00:00:00').getTime())/86400000))
     },0)
     return {employee:e,assigned:assigned.length,done:done.length,currentOverdue:currentOverdue.length,overdueDays,periodDone:periodDone.length,lateDone:lateDone.length,historicalOverdueDays,onTimeRate:periodDone.length?Math.round(onTime/periodDone.length*100):0}
   })
-  const isBoss=!REQUIRE_AUTH || currentEmployee?.role==='admin'
+  const isBoss=currentEmployee?.role==='admin'
   async function resetPerformanceOverdue() {
     if(!isBoss) return
     if(!window.confirm('確定要重置逾期績效起算日嗎？重置後，先前累積的逾期天數不再列入績效統計。')) return
@@ -597,6 +604,8 @@ function StrategyProjectView(props:ProjectViewProps & {onOpenExecution:()=>void}
       <Field label="正式定價"><input type="number" value={project.retail_price??''} onChange={e=>props.onUpdateProject(project.id,{retail_price:e.target.value?Number(e.target.value):null})}/></Field>
       <Field label="團購／活動價"><input type="number" value={project.group_price??''} onChange={e=>props.onUpdateProject(project.id,{group_price:e.target.value?Number(e.target.value):null})}/></Field>
       <Field label="專案狀態"><select value={project.status||'規劃中'} onChange={e=>props.onUpdateProject(project.id,{status:e.target.value})}>{PROJECT_STATUS.map(x=><option key={x}>{x}</option>)}</select></Field>
+      <Field label="本輪預算版本"><select value={project.budget_version||''} onChange={e=>props.onUpdateProject(project.id,{budget_version:e.target.value||null})}>{BUDGETS.map(x=><option key={x} value={x}>{x||'未決定'}</option>)}</select></Field>
+      <Field label="本輪性質"><select value={project.project_type||''} onChange={e=>props.onUpdateProject(project.id,{project_type:e.target.value||null})}>{PROJECT_TYPES.map(x=><option key={x} value={x}>{x||'未決定'}</option>)}</select></Field>
       <Field label="本輪成功定義" wide><DebouncedInput value={project.success_goal||''} onSave={v=>props.onUpdateProject(project.id,{success_goal:v||null})} placeholder="例：確認目標客群、價格與上市主打方向"/></Field>
       <Field label="產品／參考網址" wide><DebouncedInput value={(project as any).product_url||''} onSave={v=>props.onUpdateProject(project.id,{product_url:v||null} as any)} placeholder="https://..."/></Field>
       <Field label="備註" wide><DebouncedTextarea value={(project as any).notes||''} onSave={v=>props.onUpdateProject(project.id,{notes:v||null} as any)} placeholder="專案備註"/></Field>

@@ -93,6 +93,7 @@ export type ExecutionTask = {
   sort_order: number
   created_at?: string
   updated_at?: string
+  completed_at?: string | null
 }
 
 export type ExecutionTemplateDefault = {
