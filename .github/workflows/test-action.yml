@@ -1,8 +1,8 @@
-name: Performance history build check
+name: Product data sheet build check
 on:
   push:
     branches:
-      - performance-history-v2
+      - product-data-sheet-v2
 permissions:
   contents: read
 jobs:
