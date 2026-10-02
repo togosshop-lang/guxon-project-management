@@ -186,19 +186,21 @@ export default function Home() {
       const section=sectionByNumber.get(i+1)
       if(!section) return
       sectionTpl.tasks.forEach((task,j)=>{
-        const preset=templateDefaults.find(d=>d.task_title===task.title && ((d as any).project_kind||'brand')==='brand')
-        if(preset && !preset.enabled) return
+        const preset=templateDefaults.find(d=>((d as any).template_key||d.task_title)===task.title && ((d as any).project_kind||'brand')==='brand')
+        if((preset as any)?.archived || (preset && !preset.enabled)) return
         const startOffset=(preset as any)?.default_start_offset ?? task.startOffset
         const dueOffset=(preset as any)?.default_due_offset ?? task.dueOffset
         rows.push({
-        project_id:project.id, section_id:section.id, title:task.title, description:task.description,
+        project_id:project.id, section_id:section.id, title:(preset as any)?.task_title||task.title, description:(preset as any)?.task_description??task.description,
         assignee_id:preset?.default_assignee_id ?? departmentAssignee(task.department,project.owner_id),
         reviewer_id:preset?.default_reviewer_id ?? (task.reviewerDepartment?departmentAssignee(task.reviewerDepartment,project.owner_id):null),
         status:'未開始', priority:preset?.default_priority || task.priority,
         start_date:project.launch_date?addDays(project.launch_date,startOffset):null,
         due_date:project.launch_date?addDays(project.launch_date,dueOffset):null,
-        start_offset:startOffset, due_offset:dueOffset, note:null, sort_order:j+1, depends_on_task_id:null,
+        start_offset:startOffset, due_offset:dueOffset, note:null, sort_order:(preset as any)?.sort_order??j+1, depends_on_task_id:null,
       })})
+      const custom=(templateDefaults as any[]).filter(d=>(d.project_kind||'brand')==='brand'&&d.section_name===sectionTpl.name&&String(d.template_key||'').startsWith('custom-')&&!d.archived&&d.enabled!==false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
+      custom.forEach((d:any,j:number)=>{const startOffset=d.default_start_offset??-7,dueOffset=d.default_due_offset??-1;rows.push({project_id:project.id,section_id:section.id,title:d.task_title,description:d.task_description||null,assignee_id:d.default_assignee_id??null,reviewer_id:d.default_reviewer_id??null,status:'未開始',priority:d.default_priority||'中',start_date:project.launch_date?addDays(project.launch_date,startOffset):null,due_date:project.launch_date?addDays(project.launch_date,dueOffset):null,start_offset:startOffset,due_offset:dueOffset,note:null,sort_order:d.sort_order??100+j,depends_on_task_id:null})})
     })
     const {data:createdTasks,error:taskError}=await supabase.from('execution_tasks').insert(rows).select()
     if(taskError||!createdTasks) { alert('建立執行工作失敗：'+(taskError?.message||'未知錯誤')); return false }
@@ -372,41 +374,23 @@ export default function Home() {
     setEmployees(cur=>cur.map(e=>e.id===id?{...e,...patch}:e))
   }
 
-  async function saveTemplateDefault(taskTitle:string, patch:Partial<ExecutionTemplateDefault> & Record<string,unknown>) {
+  async function saveTemplateDefault(templateKey:string, patch:Partial<ExecutionTemplateDefault> & Record<string,unknown>) {
     const kind=(patch.project_kind as string)||'brand'
-    const current=(templateDefaults as any[]).find(d=>d.task_title===taskTitle && (d.project_kind||'brand')===kind)
-    const payload={
-      task_title:taskTitle,
-      project_kind:kind,
-      default_assignee_id:current?.default_assignee_id??null,
-      default_reviewer_id:current?.default_reviewer_id??null,
-      default_priority:current?.default_priority||'中',
-      default_start_offset:current?.default_start_offset??null,
-      default_due_offset:current?.default_due_offset??null,
-      enabled:current?.enabled??true,
-      ...patch,
-      updated_at:new Date().toISOString(),
-    }
-
-    if(current?.id) {
-      const {data,error}=await supabase
-        .from('execution_template_defaults')
-        .update(payload)
-        .eq('id',current.id)
-        .select()
-        .single()
-      if(error) return alert('模板設定更新失敗：'+error.message)
-      setTemplateDefaults(cur=>[...cur.filter(x=>x.id!==current.id),data as ExecutionTemplateDefault])
-      return
-    }
-
-    const {data,error}=await supabase
-      .from('execution_template_defaults')
-      .insert(payload)
-      .select()
-      .single()
-    if(error) return alert('模板設定新增失敗：'+error.message)
-    setTemplateDefaults(cur=>[...cur,data as ExecutionTemplateDefault])
+    const current=(templateDefaults as any[]).find(d=>(d.template_key||d.task_title)===templateKey && (d.project_kind||'brand')===kind)
+    const payload={template_key:templateKey,task_title:current?.task_title||templateKey,project_kind:kind,default_assignee_id:current?.default_assignee_id??null,default_reviewer_id:current?.default_reviewer_id??null,default_priority:current?.default_priority||'中',default_start_offset:current?.default_start_offset??null,default_due_offset:current?.default_due_offset??null,enabled:current?.enabled??true,archived:current?.archived??false,...patch,updated_at:new Date().toISOString()}
+    if(current?.id){const {data,error}=await supabase.from('execution_template_defaults').update(payload).eq('id',current.id).select().single();if(error)return alert('模板設定更新失敗：'+error.message);setTemplateDefaults(cur=>[...cur.filter(x=>x.id!==current.id),data as ExecutionTemplateDefault]);return}
+    const {data,error}=await supabase.from('execution_template_defaults').insert(payload).select().single();if(error)return alert('模板設定新增失敗：'+error.message);setTemplateDefaults(cur=>[...cur,data as ExecutionTemplateDefault])
+  }
+  async function addBrandTemplateItem(sectionName:string) {
+    const title=prompt('新增工作項目名稱')?.trim();if(!title)return
+    const key='custom-'+Date.now(), list=(templateDefaults as any[]).filter(d=>(d.project_kind||'brand')==='brand'&&d.section_name===sectionName)
+    const sortOrder=Math.max(0,...list.map(d=>Number(d.sort_order)||0))+10
+    const {data,error}=await supabase.from('execution_template_defaults').insert({template_key:key,task_title:title,project_kind:'brand',section_name:sectionName,task_description:'',sort_order:sortOrder,default_assignee_id:null,default_reviewer_id:null,default_priority:'中',default_start_offset:-7,default_due_offset:-1,enabled:true,archived:false,updated_at:new Date().toISOString()}).select().single()
+    if(error)return alert('新增模板項目失敗：'+error.message);setTemplateDefaults(cur=>[...cur,data as ExecutionTemplateDefault])
+  }
+  async function deleteBrandTemplateItem(templateKey:string,title:string) {
+    if(!confirm(`確定從模板刪除「${title}」？\n\n只影響之後新建立的專案，既有專案不會變動。`))return
+    await saveTemplateDefault(templateKey,{project_kind:'brand',archived:true,enabled:false})
   }
 
   async function add1688TemplateItem() {
@@ -573,7 +557,7 @@ export default function Home() {
   if(loading) return <Loading />
   if(REQUIRE_AUTH && session && !currentEmployee) return <AccessDeniedScreen email={session.user.email||''} />
   if(view==='employees') return <EmployeeView employees={employees} onBack={()=>setView('dashboard')} onAdd={addEmployee} onUpdate={updateEmployee} />
-  if(view==='template') return <TemplateSettingsView employees={employees} defaults={templateDefaults} onBack={()=>setView('dashboard')} onSave={saveTemplateDefault} onAdd1688={add1688TemplateItem} onDelete1688={delete1688TemplateItem} />
+  if(view==='template') return <TemplateSettingsView employees={employees} defaults={templateDefaults} onBack={()=>setView('dashboard')} onSave={saveTemplateDefault} onAdd1688={add1688TemplateItem} onDelete1688={delete1688TemplateItem} onAddBrand={addBrandTemplateItem} onDeleteBrand={deleteBrandTemplateItem} />
   if(selectedProject) return <ProjectView project={selectedProject} stages={projectStages} tasks={projectTasks} gates={projectGates} executionSections={projectExecutionSections} executionTasks={projectExecutionTasks} employees={employees} expanded={expanded} setExpanded={setExpanded} focusTask={focusTask} onBack={closeProject} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateStage={updateStage} onToggleGate={toggleGate} onAddTask={addTask} onDeleteTask={deleteTask} onDeleteProject={deleteProject} onCreateExecutionTemplate={()=>createExecutionTemplate(selectedProject)} onUpdateExecutionTask={updateExecutionTask} onAddExecutionTask={addExecutionTask} onDeleteExecutionTask={deleteExecutionTask} onRescheduleExecution={()=>rescheduleExecution(selectedProject)} />
 
   return <main className="page"><div className="shell">
@@ -745,14 +729,19 @@ function offsetPhase(value:number|null|undefined) { return (value??0) > 0 ? 'aft
 function offsetDays(value:number|null|undefined) { return Math.abs(Number(value??0)) }
 function makeOffset(phase:string, days:number) { return phase==='after' ? Math.abs(days) : -Math.abs(days) }
 
-function TemplateSettingsView({employees,defaults,onBack,onSave,onAdd1688,onDelete1688}:{employees:Employee[];defaults:ExecutionTemplateDefault[];onBack:()=>void;onSave:(title:string,p:Partial<ExecutionTemplateDefault>&Record<string,unknown>)=>void;onAdd1688:()=>void;onDelete1688:(title:string)=>void}) {
+function TemplateSettingsView({employees,defaults,onBack,onSave,onAdd1688,onDelete1688,onAddBrand,onDeleteBrand}:{employees:Employee[];defaults:ExecutionTemplateDefault[];onBack:()=>void;onSave:(key:string,p:Partial<ExecutionTemplateDefault>&Record<string,unknown>)=>void;onAdd1688:()=>void;onDelete1688:(title:string)=>void;onAddBrand:(section:string)=>void;onDeleteBrand:(key:string,title:string)=>void}) {
   const [kind,setKind]=useState<'brand'|'1688'>('brand')
-  function preset(title:string, priority:string, startOffset:number|null=null, dueOffset:number|null=null){ return (defaults as any[]).find(d=>d.task_title===title&&((d.project_kind||'brand')===kind)) || {task_title:title,project_kind:kind,default_assignee_id:null,default_reviewer_id:null,default_priority:priority,default_start_offset:startOffset,default_due_offset:dueOffset,enabled:true} }
+  function preset(key:string, priority:string, startOffset:number|null=null, dueOffset:number|null=null){ return (defaults as any[]).find(d=>(d.template_key||d.task_title)===key&&((d.project_kind||'brand')===kind)) || {template_key:key,task_title:key,project_kind:kind,default_assignee_id:null,default_reviewer_id:null,default_priority:priority,default_start_offset:startOffset,default_due_offset:dueOffset,enabled:true,archived:false} }
   const list1688=(defaults as any[]).filter(d=>(d.project_kind||'brand')==='1688').sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
   return <main className="page"><div className="shell"><Header/><div className="page-title-row"><div><h1>新品執行模板設定</h1><p>設定之後新建立專案時要自動產生的工作項目、預設負責人，以及依上市日自動排程的開始／完成時間。</p></div><button className="btn" onClick={onBack}>← 返回首頁</button></div>
     <div className="kind-choice" style={{marginBottom:16}}><button className={kind==='brand'?'active':''} onClick={()=>setKind('brand')}><b>GUXON 品牌新品</b><small>完整新品執行模板</small></button><button className={kind==='1688'?'active':''} onClick={()=>setKind('1688')}><b>1688 新品</b><small>簡化上架模板，可自由新增項目</small></button></div>
     <div className="template-settings-note">這裡只影響「之後新建立的專案」。開始／完成時間以上市日 D0 自動換算；既有專案不會被模板設定覆蓋。</div>
-    {kind==='brand'?<div className="template-settings">{EXECUTION_TEMPLATE.map((section,si)=><section className="template-section" key={section.name}><div className="template-section-head"><b>{String(si+1).padStart(2,'0')}　{section.name}</b><span>{section.tasks.length} 項</span></div><div className="table-wrap"><table><thead><tr><th>工作項目</th><th>開始時間</th><th>完成時間</th><th>預設負責人</th><th>預設審核人</th><th>優先級</th><th>預設啟用</th></tr></thead><tbody>{section.tasks.map(task=>{const d=preset(task.title,task.priority,task.startOffset,task.dueOffset);const startValue=d.default_start_offset??task.startOffset;const dueValue=d.default_due_offset??task.dueOffset;return <tr key={task.title}><td><b>{task.title}</b><small className="task-hint">{task.description}</small></td><td><div style={{display:'flex',gap:6,alignItems:'center',minWidth:180}}><select style={{width:82}} value={offsetPhase(startValue)} onChange={e=>onSave(task.title,{project_kind:'brand',default_start_offset:makeOffset(e.target.value,offsetDays(startValue))})}><option value="before">上市前</option><option value="after">上市後</option></select><input type="number" min="0" style={{width:70}} value={offsetDays(startValue)} onChange={e=>onSave(task.title,{project_kind:'brand',default_start_offset:makeOffset(offsetPhase(startValue),Number(e.target.value)||0)})}/><span>天</span></div></td><td><div style={{display:'flex',gap:6,alignItems:'center',minWidth:180}}><select style={{width:82}} value={offsetPhase(dueValue)} onChange={e=>onSave(task.title,{project_kind:'brand',default_due_offset:makeOffset(e.target.value,offsetDays(dueValue))})}><option value="before">上市前</option><option value="after">上市後</option></select><input type="number" min="0" style={{width:70}} value={offsetDays(dueValue)} onChange={e=>onSave(task.title,{project_kind:'brand',default_due_offset:makeOffset(offsetPhase(dueValue),Number(e.target.value)||0)})}/><span>天</span></div></td><td><select value={d.default_assignee_id??''} onChange={e=>onSave(task.title,{project_kind:'brand',default_assignee_id:e.target.value?Number(e.target.value):null})}><option value="">依部門自動指派</option>{employees.filter(e=>e.active).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select></td><td><select value={d.default_reviewer_id??''} onChange={e=>onSave(task.title,{project_kind:'brand',default_reviewer_id:e.target.value?Number(e.target.value):null})}><option value="">依部門／未指定</option>{employees.filter(e=>e.active).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select></td><td><select value={d.default_priority||task.priority} onChange={e=>onSave(task.title,{project_kind:'brand',default_priority:e.target.value})}>{PRIORITIES.map(x=><option key={x}>{x}</option>)}</select></td><td className="center-cell"><input type="checkbox" checked={d.enabled!==false} onChange={e=>onSave(task.title,{project_kind:'brand',enabled:e.target.checked})}/></td></tr>})}</tbody></table></div></section>)}</div>:
+    {kind==='brand'?<div className="template-settings">{EXECUTION_TEMPLATE.map((section,si)=>{
+      const baseRows=section.tasks.map(task=>({key:task.title,task,d:preset(task.title,task.priority,task.startOffset,task.dueOffset)})).filter(x=>!x.d.archived)
+      const customRows=(defaults as any[]).filter(d=>(d.project_kind||'brand')==='brand'&&d.section_name===section.name&&String(d.template_key||'').startsWith('custom-')&&!d.archived).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).map((d:any)=>({key:d.template_key,task:{title:d.task_title,description:d.task_description||'',priority:d.default_priority||'中',startOffset:d.default_start_offset??-7,dueOffset:d.default_due_offset??-1},d}))
+      const rows=[...baseRows,...customRows]
+      return <section className="template-section" key={section.name}><div className="template-section-head"><b>{String(si+1).padStart(2,'0')}　{section.name}</b><div className="actions"><span>{rows.length} 項</span><button className="btn-primary" onClick={()=>onAddBrand(section.name)}>＋ 新增工作項目</button></div></div><div className="table-wrap"><table><thead><tr><th>工作項目／說明</th><th>開始時間</th><th>完成時間</th><th>預設負責人</th><th>預設審核人</th><th>優先級</th><th>啟用</th><th></th></tr></thead><tbody>{rows.map(({key,task,d}:any)=>{const startValue=d.default_start_offset??task.startOffset,dueValue=d.default_due_offset??task.dueOffset;return <tr key={key}><td><DebouncedInput value={d.task_title||task.title} onSave={v=>v.trim()&&onSave(key,{project_kind:'brand',task_title:v.trim(),section_name:section.name})}/><DebouncedTextarea value={d.task_description??task.description} onSave={v=>onSave(key,{project_kind:'brand',task_description:v||null,section_name:section.name})} placeholder="工作說明"/></td><td><div style={{display:'flex',gap:6,alignItems:'center',minWidth:180}}><select style={{width:82}} value={offsetPhase(startValue)} onChange={e=>onSave(key,{project_kind:'brand',default_start_offset:makeOffset(e.target.value,offsetDays(startValue)),section_name:section.name})}><option value="before">上市前</option><option value="after">上市後</option></select><input type="number" min="0" style={{width:70}} value={offsetDays(startValue)} onChange={e=>onSave(key,{project_kind:'brand',default_start_offset:makeOffset(offsetPhase(startValue),Number(e.target.value)||0),section_name:section.name})}/><span>天</span></div></td><td><div style={{display:'flex',gap:6,alignItems:'center',minWidth:180}}><select style={{width:82}} value={offsetPhase(dueValue)} onChange={e=>onSave(key,{project_kind:'brand',default_due_offset:makeOffset(e.target.value,offsetDays(dueValue)),section_name:section.name})}><option value="before">上市前</option><option value="after">上市後</option></select><input type="number" min="0" style={{width:70}} value={offsetDays(dueValue)} onChange={e=>onSave(key,{project_kind:'brand',default_due_offset:makeOffset(offsetPhase(dueValue),Number(e.target.value)||0),section_name:section.name})}/><span>天</span></div></td><td><select value={d.default_assignee_id??''} onChange={e=>onSave(key,{project_kind:'brand',default_assignee_id:e.target.value?Number(e.target.value):null,section_name:section.name})}><option value="">依部門自動指派</option>{employees.filter(e=>e.active).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select></td><td><select value={d.default_reviewer_id??''} onChange={e=>onSave(key,{project_kind:'brand',default_reviewer_id:e.target.value?Number(e.target.value):null,section_name:section.name})}><option value="">依部門／未指定</option>{employees.filter(e=>e.active).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select></td><td><select value={d.default_priority||task.priority} onChange={e=>onSave(key,{project_kind:'brand',default_priority:e.target.value,section_name:section.name})}>{PRIORITIES.map(x=><option key={x}>{x}</option>)}</select></td><td className="center-cell"><input type="checkbox" checked={d.enabled!==false} onChange={e=>onSave(key,{project_kind:'brand',enabled:e.target.checked,section_name:section.name})}/></td><td><button className="text-danger" onClick={()=>onDeleteBrand(key,d.task_title||task.title)}>刪除</button></td></tr>})}</tbody></table></div></section>
+    })}</div>:
     <div className="template-settings"><section className="template-section"><div className="template-section-head"><b>1688 新品上架模板</b><div className="actions"><span>{list1688.length} 項</span><button className="btn-primary" onClick={onAdd1688}>＋ 新增工作項目</button></div></div><div className="table-wrap"><table><thead><tr><th>順序</th><th>工作項目／說明</th><th>預設負責人</th><th>優先級</th><th>啟用</th><th></th></tr></thead><tbody>{list1688.map((d:any)=><tr key={d.id||d.task_title}><td><input type="number" style={{width:80}} value={d.sort_order??0} onChange={e=>onSave(d.task_title,{project_kind:'1688',sort_order:Number(e.target.value)})}/></td><td><b>{d.task_title}</b><DebouncedTextarea value={d.task_description||''} onSave={v=>onSave(d.task_title,{project_kind:'1688',task_description:v||null})} placeholder="工作說明"/></td><td><select value={d.default_assignee_id??''} onChange={e=>onSave(d.task_title,{project_kind:'1688',default_assignee_id:e.target.value?Number(e.target.value):null})}><option value="">使用專案主要負責人</option>{employees.filter(e=>e.active).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select></td><td><select value={d.default_priority||'中'} onChange={e=>onSave(d.task_title,{project_kind:'1688',default_priority:e.target.value})}>{PRIORITIES.map(x=><option key={x}>{x}</option>)}</select></td><td className="center-cell"><input type="checkbox" checked={d.enabled!==false} onChange={e=>onSave(d.task_title,{project_kind:'1688',enabled:e.target.checked})}/></td><td><button className="text-danger" onClick={()=>onDelete1688(d.task_title)}>刪除</button></td></tr>)}</tbody></table>{!list1688.length&&<div className="empty">目前沒有 1688 模板項目，請按「＋ 新增工作項目」。</div>}</div></section></div>}
   </div></main>
 }

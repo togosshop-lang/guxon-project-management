@@ -104,10 +104,19 @@ export type ExecutionTask = {
 export type ExecutionTemplateDefault = {
   id?: number
   task_title: string
+  template_key?: string | null
+  project_kind?: string | null
+  section_name?: string | null
+  section_description?: string | null
+  task_description?: string | null
+  sort_order?: number | null
+  default_start_offset?: number | null
+  default_due_offset?: number | null
   default_assignee_id: number | null
   default_reviewer_id: number | null
   default_priority: string
   enabled: boolean
+  archived?: boolean
   updated_at?: string
 }
 
