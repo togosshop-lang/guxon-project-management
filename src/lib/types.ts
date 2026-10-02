@@ -13,7 +13,12 @@ export type Project = {
   success_goal: string | null
   product_url?: string | null
   notes?: string | null
+  strategy_start_date?: string | null
   strategy_due_date?: string | null
+  strategy_assignee_id?: number | null
+  strategy_completed?: boolean | null
+  strategy_completed_at?: string | null
+  image_url?: string | null
   created_at?: string
 }
 

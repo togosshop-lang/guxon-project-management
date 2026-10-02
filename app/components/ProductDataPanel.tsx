@@ -30,14 +30,27 @@ export default function ProductDataPanel({projectId,projectName,model}:Props){
    const {error}=await supabase.from('product_data_sheets').upsert({project_id:projectId,public_specs:normalized,internal_analysis:internal,completed:forceCompleted,completed_at:forceCompleted?now:null,updated_at:now},{onConflict:'project_id'})
    setSaving(false);if(error)return alert('儲存失敗：'+error.message);setSpec(normalized);setCompleted(forceCompleted);alert(forceCompleted?'產品資料表已標記完成。':'產品資料表已儲存。')
  }
- function exportExcel(){
+ function buildPublicRows(){
    const esc=(v:any)=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
    let rows='<tr><th colspan="3">規格紀錄表</th></tr>'
-   for(const section of SECTIONS){rows+=`<tr><th colspan="3">${esc(section.title)}</th></tr>`;for(const [k,l] of section.fields)rows+=`<tr><td>${esc(l)}</td><td colspan="2">${esc(spec[k])}</td></tr>`;if(section.title.startsWith('二、')){rows+='<tr><th colspan="3">三、特色重點說明</th></tr><tr><th>編號</th><th colspan="2">特色重點說明</th></tr>'+features.map((x:any,i:number)=>`<tr><td>${i+1}</td><td colspan="2">${esc(x.description)}</td></tr>`)}}
+   for(const section of SECTIONS){rows+=`<tr><th colspan="3">${esc(section.title)}</th></tr>`;for(const [k,l] of section.fields)rows+=`<tr><td>${esc(l)}</td><td colspan="2">${esc(spec[k])}</td></tr>`;if(section.title.startsWith('二、')){rows+='<tr><th colspan="3">三、特色重點說明</th></tr><tr><th>編號</th><th colspan="2">特色重點說明</th></tr>'+features.map((x:any,i:number)=>`<tr><td>${i+1}</td><td colspan="2">${esc(x.description)}</td></tr>`).join('')}}
    rows+='<tr><th colspan="3">五、常見問題（FAQ）</th></tr><tr><th>編號</th><th>問題</th><th>回答</th></tr>'+faqs.map((x:any,i:number)=>`<tr><td>${i+1}</td><td>${esc(x.question)}</td><td>${esc(x.answer)}</td></tr>`).join('')
    rows+='<tr><th colspan="3">六、國際條碼</th></tr><tr><th>編號</th><th>規格/顏色</th><th>國際條碼</th></tr>'+barcodes.map((x:any,i:number)=>`<tr><td>${i+1}</td><td>${esc(x.variant)}</td><td>${esc(x.barcode)}</td></tr>`).join('')
+   return {rows,esc}
+ }
+ function downloadExcel(rows:string,fileName:string){
    const html=`<html><head><meta charset="utf-8"></head><body><table border="1">${rows}</table></body></html>`
-   const url=URL.createObjectURL(new Blob([html],{type:'application/vnd.ms-excel;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download=`${projectName}_規格紀錄表.xls`;a.click();URL.revokeObjectURL(url)
+   const url=URL.createObjectURL(new Blob([html],{type:'application/vnd.ms-excel;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download=fileName;a.click();URL.revokeObjectURL(url)
+ }
+ function exportExcel(){
+   const {rows}=buildPublicRows()
+   downloadExcel(rows,`${projectName}_客服規格表.xls`)
+ }
+ function exportFullExcel(){
+   const {rows:publicRows,esc}=buildPublicRows()
+   let rows=publicRows+'<tr><th colspan="3">內部分析資料（機密）</th></tr>'
+   for(const [k,l] of INTERNAL) rows+=`<tr><td>${esc(l)}</td><td colspan="2">${esc(internal[k])}</td></tr>`
+   downloadExcel(rows,`${projectName}_完整產品資料表_內部分析.xls`)
  }
  const listEditor=(key:string,list:any[],cols:[string,string][]) => <div className="product-list"><div className="product-list-head">{cols.map(c=><b key={c[0]}>{c[1]}</b>)}</div>{list.map((row,i)=><div className="product-list-row" key={row.id||i}>{cols.map(([k])=><textarea key={k} value={row[k]||''} onChange={e=>{const next=list.map((x,j)=>j===i?{...x,[k]:e.target.value}:x);setList(key,next)}}/>)}<button className="text-danger" onClick={()=>setList(key,list.filter((_,j)=>j!==i))}>刪除</button></div>)}<button className="btn" onClick={()=>setList(key,[...list,{id:uid()}])}>＋ 新增一列</button></div>
  return <section className="product-data-panel">
@@ -48,7 +61,7 @@ export default function ProductDataPanel({projectId,projectName,model}:Props){
      <div className="product-data-section"><h3>五、常見問題（FAQ）</h3>{listEditor('faqs',faqs,[['question','問題'],['answer','回答']])}</div>
      <div className="product-data-section"><h3>六、國際條碼</h3>{listEditor('barcodes',barcodes,[['variant','規格／顏色'],['barcode','國際條碼']])}</div>
      <div className="product-data-section internal"><h3>內部分析資料 🔒 <small>不匯出至客服規格表</small></h3><div className="product-data-grid">{INTERNAL.map(([k,l])=><label key={k}><b>{l}</b><textarea value={internal[k]||''} onChange={e=>setInternal(s=>({...s,[k]:e.target.value}))}/></label>)}</div></div>
-     <div className="product-data-actions"><label><input type="checkbox" checked={completed} onChange={e=>setCompleted(e.target.checked)}/> 產品資料表已完成</label><div><button className="btn" onClick={exportExcel}>匯出客服規格表 Excel</button><button className="btn-primary" disabled={saving} onClick={()=>save()}>{saving?'儲存中…':'儲存產品資料表'}</button></div></div>
+     <div className="product-data-actions"><label><input type="checkbox" checked={completed} onChange={e=>setCompleted(e.target.checked)}/> 產品資料表已完成</label><div><button className="btn" onClick={exportExcel}>匯出客服規格表 Excel</button><button className="btn" onClick={exportFullExcel}>匯出完整產品資料表 Excel</button><button className="btn-primary" disabled={saving} onClick={()=>save()}>{saving?'儲存中…':'儲存產品資料表'}</button></div></div>
    </div>}
  </section>
 }
