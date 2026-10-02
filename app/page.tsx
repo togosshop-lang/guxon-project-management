@@ -57,6 +57,7 @@ export default function Home() {
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('全部')
   const [kindFilter, setKindFilter] = useState('全部')
+  const [projectSort, setProjectSort] = useState<'launch_desc'|'launch_asc'|'created_desc'|'created_asc'>('launch_desc')
   const [assigneeFilter, setAssigneeFilter] = useState('全部')
   const [attentionProjectFilter, setAttentionProjectFilter] = useState('全部')
   const [showNewProject, setShowNewProject] = useState(false)
@@ -425,10 +426,23 @@ export default function Home() {
     setTemplateDefaults(cur=>cur.filter(x=>!(x.task_title===taskTitle&&((x as any).project_kind||'brand')==='1688')))
   }
 
-  const filteredProjects=useMemo(()=>projects.filter(p=>{
-    const q=query.trim().toLowerCase()
-    return (!q||p.name.toLowerCase().includes(q)||(p.version||'').toLowerCase().includes(q)) && (statusFilter==='全部'||p.status===statusFilter) && (kindFilter==='全部'||(p.project_kind||'brand')===kindFilter)
-  }),[projects,query,statusFilter,kindFilter])
+  const filteredProjects=useMemo(()=>{
+    const list=projects.filter(p=>{
+      const q=query.trim().toLowerCase()
+      return (!q||p.name.toLowerCase().includes(q)||(p.version||'').toLowerCase().includes(q)) && (statusFilter==='全部'||p.status===statusFilter) && (kindFilter==='全部'||(p.project_kind||'brand')===kindFilter)
+    })
+    return [...list].sort((a,b)=>{
+      if(projectSort==='created_desc'||projectSort==='created_asc'){
+        const av=a.created_at||'', bv=b.created_at||''
+        return projectSort==='created_desc'?bv.localeCompare(av):av.localeCompare(bv)
+      }
+      const av=a.launch_date||'', bv=b.launch_date||''
+      if(!av&&!bv) return (b.created_at||'').localeCompare(a.created_at||'')
+      if(!av) return 1
+      if(!bv) return -1
+      return projectSort==='launch_desc'?bv.localeCompare(av):av.localeCompare(bv)
+    })
+  },[projects,query,statusFilter,kindFilter,projectSort])
 
   const currentEmployee=useMemo(()=>{
     if(!session?.user) return null
@@ -567,7 +581,7 @@ export default function Home() {
     <div className="page-title-row"><div><h1>新品管理平台</h1><p>品牌新品使用產品資料、AI 策略決策與執行流程；1688 新品使用簡化上架流程</p></div><div className="actions">{isManager&&<button className="btn" onClick={()=>setView('employees')}>員工管理</button>}{isManager&&<button className="btn" onClick={()=>setView('template')}>執行模板設定</button>}{isManager&&<button className="btn-primary" onClick={()=>setShowNewProject(true)}>＋ 新增專案</button>}</div></div>
 
     <section className="project-dashboard-v2">
-      <div className="project-status-row"><b>品牌新品專案</b><Stat label="規劃中" value={statusCount(brandProjects,'規劃中')}/><Stat label="進行中" value={statusCount(brandProjects,'進行中')}/><Stat label="已逾期" value={overdueProjectCount(brandProjects)} danger={overdueProjectCount(brandProjects)>0}/><Stat label="已結案" value={statusCount(brandProjects,'已結案')}/></div>
+      <div className="project-status-row"><b>品牌新品專案</b><Stat label="規劃中" value={statusCount(brandProjects,'規劃中')}/><Stat label="進行中" value={statusCount(brandProjects,'進行中')}/><Stat label="已上市" value={statusCount(brandProjects,'已上市')}/><Stat label="已結案" value={statusCount(brandProjects,'已結案')}/></div>
       <div className="project-status-row"><b>1688 新品</b><Stat label="進行中" value={statusCount(p1688,'進行中')+statusCount(p1688,'規劃中')}/><Stat label="已逾期" value={overdueProjectCount(p1688)} danger={overdueProjectCount(p1688)>0}/><Stat label="已結案" value={statusCount(p1688,'已結案')}/></div>
     </section>
 
@@ -579,7 +593,7 @@ export default function Home() {
       <div className="panel"><div className="panel-head"><div><b>團隊工作狀況</b><small>目前工作狀況＋重置後歷史績效</small></div>{isBoss&&<button className="btn" onClick={resetPerformanceOverdue}>重置逾期天數</button>}</div>{resetDate&&<p className="performance-note">績效起算日：{resetDate}</p>}<div className="team-performance">{employeePerformance.map(x=><div className="performance-row" key={x.employee.id}><div className="performance-person"><b>{x.employee.name}</b><small>{x.employee.department||'未設定職務'}</small></div><div className="performance-metric"><small>目前逾期</small><b className={x.currentOverdue>0?'danger-text':''}>{x.currentOverdue} 件／{x.overdueDays} 天</b></div><div className="performance-metric"><small>期間完成</small><b>{x.periodDone} 件</b></div><div className="performance-metric"><small>逾期完成</small><b className={x.lateDone>0?'danger-text':''}>{x.lateDone} 件／{x.historicalOverdueDays} 天</b></div><div className="performance-metric"><small>準時率</small><b>{x.onTimeRate}%</b></div></div>)}</div><p className="performance-note">目前逾期＝尚未完成的執行任務；歷史績效＝起算日後完成的執行任務。策略決策不列入員工逾期績效。</p></div>
     </section>
 
-    <div className="filters"><input placeholder="搜尋專案名稱或型號…" value={query} onChange={e=>setQuery(e.target.value)}/><select value={kindFilter} onChange={e=>changeKindFilter(e.target.value)}><option value="全部">全部類型</option><option value="brand">GUXON 品牌新品</option><option value="1688">1688 新品</option></select><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option>全部</option>{PROJECT_STATUS.map(x=><option key={x}>{x}</option>)}</select></div>
+    <div className="filters"><input placeholder="搜尋專案名稱或型號…" value={query} onChange={e=>setQuery(e.target.value)}/><select value={kindFilter} onChange={e=>changeKindFilter(e.target.value)}><option value="全部">全部類型</option><option value="brand">GUXON 品牌新品</option><option value="1688">1688 新品</option></select><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option>全部</option>{PROJECT_STATUS.map(x=><option key={x}>{x}</option>)}</select><select value={projectSort} onChange={e=>setProjectSort(e.target.value as typeof projectSort)} aria-label="專案排序"><option value="launch_desc">上市日：新 → 舊</option><option value="launch_asc">上市日：舊 → 新</option><option value="created_desc">建立日：新 → 舊</option><option value="created_asc">建立日：舊 → 新</option></select></div>
     <div className="project-list">{filteredProjects.map(p=>{
       const pt=projectTaskList(p.id), pct=taskProgress(pt), et=executionTaskList(p.id), ep=executionProgress(et), owner=employeeName(p.owner_id)
       const is1688=(p.project_kind||'brand')==='1688'
