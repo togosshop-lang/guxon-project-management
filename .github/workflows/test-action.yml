@@ -1,25 +1,17 @@
-name: Performance metrics upgrade
+name: Product data sheet build check
 on:
   push:
-    paths:
-      - .github/workflows/test-action.yml
+    branches:
+      - product-data-sheet-v2
 permissions:
-  contents: write
+  contents: read
 jobs:
-  apply:
+  build:
     runs-on: ubuntu-latest
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder-publishable-key
     steps:
       - uses: actions/checkout@v4
-      - run: python scripts/apply_performance_metrics_v1.py
       - run: npm ci
       - run: npm run build
-      - run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git add app/page.tsx
-          git diff --cached --quiet && exit 0
-          git commit -m "Add current and historical overdue performance metrics"
-          git push
