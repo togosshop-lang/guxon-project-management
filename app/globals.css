@@ -75,3 +75,22 @@
 .new-project-image-field small{white-space:nowrap;color:#64748b}
 @media(max-width:900px){.strategy-task-fields{grid-template-columns:1fr 1fr;min-width:0}.project-thumb{width:58px;height:58px}}
 @media(max-width:600px){.strategy-task-fields{grid-template-columns:1fr}.project-card-title-wrap{align-items:flex-start}}
+
+/* Compact product data form */
+.product-data-body{padding:16px 18px}
+.product-data-section{padding:14px 0}
+.product-data-section h3{margin:0 0 10px;font-size:15px}
+.product-data-grid{gap:10px 12px}
+.product-data-grid label{gap:5px}
+.product-data-grid label>b{font-size:12px}
+.product-data-grid textarea{min-height:58px;padding:8px 10px;line-height:1.35;resize:vertical}
+.product-list{gap:8px}
+.product-list-head,.product-list-row{gap:8px}
+.product-list-row textarea{min-height:48px;padding:7px 9px;line-height:1.3}
+.product-data-actions{padding-top:14px}
+
+/* Closed project visual state */
+.project-card-closed{background:#f2f7f3;border-color:#9fc7a7;box-shadow:inset 4px 0 0 #5d8f67}
+.project-card-closed:hover{background:#eaf3ec}
+.project-card-closed .project-heading-line h2{color:#315b3a}
+.project-card-closed .stage-chip{background:rgba(255,255,255,.72)}
