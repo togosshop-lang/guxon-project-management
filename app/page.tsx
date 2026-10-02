@@ -604,6 +604,8 @@ function StrategyProjectView(props:ProjectViewProps & {onOpenExecution:()=>void}
       <Field label="正式定價"><input type="number" value={project.retail_price??''} onChange={e=>props.onUpdateProject(project.id,{retail_price:e.target.value?Number(e.target.value):null})}/></Field>
       <Field label="團購／活動價"><input type="number" value={project.group_price??''} onChange={e=>props.onUpdateProject(project.id,{group_price:e.target.value?Number(e.target.value):null})}/></Field>
       <Field label="專案狀態"><select value={project.status||'規劃中'} onChange={e=>props.onUpdateProject(project.id,{status:e.target.value})}>{PROJECT_STATUS.map(x=><option key={x}>{x}</option>)}</select></Field>
+      <Field label="本輪預算版本"><select value={project.budget_version||''} onChange={e=>props.onUpdateProject(project.id,{budget_version:e.target.value||null})}>{BUDGETS.map(x=><option key={x} value={x}>{x||'未決定'}</option>)}</select></Field>
+      <Field label="本輪性質"><select value={project.project_type||''} onChange={e=>props.onUpdateProject(project.id,{project_type:e.target.value||null})}>{PROJECT_TYPES.map(x=><option key={x} value={x}>{x||'未決定'}</option>)}</select></Field>
       <Field label="本輪成功定義" wide><DebouncedInput value={project.success_goal||''} onSave={v=>props.onUpdateProject(project.id,{success_goal:v||null})} placeholder="例：確認目標客群、價格與上市主打方向"/></Field>
       <Field label="產品／參考網址" wide><DebouncedInput value={(project as any).product_url||''} onSave={v=>props.onUpdateProject(project.id,{product_url:v||null} as any)} placeholder="https://..."/></Field>
       <Field label="備註" wide><DebouncedTextarea value={(project as any).notes||''} onSave={v=>props.onUpdateProject(project.id,{notes:v||null} as any)} placeholder="專案備註"/></Field>
