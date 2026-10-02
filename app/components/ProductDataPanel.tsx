@@ -5,11 +5,11 @@ import { supabase } from '@/src/lib/supabase'
 
 type Props={projectId:number;projectName:string;model?:string|null}
 
-const SECTIONS=[
+const SECTIONS: Array<{title:string;fields:Array<readonly [string,string]>}>=[
  {title:'一、基本資料',fields:[['product_name','產品名稱'],['model','型號／貨號'],['category_series','分類／系列'],['owner','負責人'],['record_date','建檔日期'],['current_status','目前狀態']]},
  {title:'二、規格明細',fields:[['product_dimensions','產品尺寸（長×寬×高，cm）'],['package_dimensions','包裝尺寸'],['net_gross_weight','淨重／毛重'],['material','材質'],['color_options','顏色／款式選項'],['capacity_parameters','容量／規格參數'],['packaging_method','包裝方式'],['accessories','配件內容物'],['power_battery','電源／電池規格（如適用）'],['carton_info','裝箱尺寸／裝箱數量／裝箱實重'],['warranty','保固']]},
  {title:'四、注意事項／其他備註',fields:[['warnings','使用注意事項／警語'],['notes','備註']]},
-] as const
+]
 const INTERNAL=[['target_audience','目標客群'],['use_scenarios','核心使用情境'],['competitors','主要競品'],['competitor_price','競品價格帶'],['retail_price','預計售價'],['cost','成本'],['margin','毛利'],['positioning','核心差異化'],['launch_direction','上市主打方向'],['market_notes','市場觀察'],['supplier','供應商／採購資訊']] as const
 type Row={id:string;[key:string]:string}
 const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36)
@@ -20,8 +20,8 @@ export default function ProductDataPanel({projectId,projectName,model}:Props){
  const [spec,setSpec]=useState<Record<string,any>>({}),[internal,setInternal]=useState<Record<string,string>>({})
  useEffect(()=>{(async()=>{const {data}=await supabase.from('product_data_sheets').select('*').eq('project_id',projectId).maybeSingle();if(data){setSpec(data.public_specs||{});setInternal(data.internal_analysis||{});setCompleted(!!data.completed)}else setSpec({product_name:projectName,model:model||''})})()},[projectId])
  const features=arr(spec.features_list,5),faqs=arr(spec.faqs,5),barcodes=arr(spec.barcodes,4)
- const scalarFields=SECTIONS.flatMap(s=>s.fields)
- const filled=scalarFields.filter(([k])=>String(spec[k]||'').trim()).length+(features.some((x:any)=>x.description)?1:0)+(faqs.some((x:any)=>x.question||x.answer)?1:0)+(barcodes.some((x:any)=>x.variant||x.barcode)?1:0)
+ const scalarFields: Array<readonly [string,string]>=SECTIONS.flatMap(section=>section.fields)
+ const filled=scalarFields.filter(([k])=>String(spec[k]||'').trim().length>0).length+(features.some((x:any)=>x.description)?1:0)+(faqs.some((x:any)=>x.question||x.answer)?1:0)+(barcodes.some((x:any)=>x.variant||x.barcode)?1:0)
  const total=scalarFields.length+3,progress=Math.round(filled/total*100)
  function setList(key:string,list:Row[]){setSpec(s=>({...s,[key]:list}))}
  async function save(forceCompleted=completed){
