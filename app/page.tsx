@@ -217,9 +217,16 @@ export default function Home() {
   }
 
   async function updateExecutionTask(id:number, patch:Partial<ExecutionTask>) {
-    const {error}=await supabase.from('execution_tasks').update({...patch,updated_at:new Date().toISOString()}).eq('id',id)
+    const current=executionTasks.find(t=>t.id===id)
+    const now=new Date().toISOString()
+    const updatePatch:any={...patch,updated_at:now}
+    if(patch.status!==undefined && current && patch.status!==current.status){
+      if(isDone(patch.status) && !isDone(current.status)) updatePatch.completed_at=now
+      else if(!isDone(patch.status) && isDone(current.status)) updatePatch.completed_at=null
+    }
+    const {error}=await supabase.from('execution_tasks').update(updatePatch).eq('id',id)
     if(error) return alert('更新失敗：'+error.message)
-    setExecutionTasks(cur=>cur.map(t=>t.id===id?{...t,...patch}:t))
+    setExecutionTasks(cur=>cur.map(t=>t.id===id?{...t,...updatePatch}:t))
   }
 
   async function addExecutionTask(sectionId:number) {
@@ -482,14 +489,14 @@ export default function Home() {
     const onTime=periodDone.filter(t=>!t.due_date || (t.updated_at||'').slice(0,10)<=t.due_date).length
     const lateDone=periodDone.filter(t=>t.due_date && (t.updated_at||'').slice(0,10)>t.due_date)
     const historicalOverdueDays=lateDone.reduce((sum,t)=>{
-      const completed=(t.updated_at||'').slice(0,10)
+      const completed=(t.completed_at||t.updated_at||'').slice(0,10)
       const start=resetDate && resetDate>t.due_date! ? resetDate : t.due_date!
       if(!completed||completed<=start) return sum
       return sum+Math.max(0,Math.round((new Date(completed+'T00:00:00').getTime()-new Date(start+'T00:00:00').getTime())/86400000))
     },0)
     return {employee:e,assigned:assigned.length,done:done.length,currentOverdue:currentOverdue.length,overdueDays,periodDone:periodDone.length,lateDone:lateDone.length,historicalOverdueDays,onTimeRate:periodDone.length?Math.round(onTime/periodDone.length*100):0}
   })
-  const isBoss=!REQUIRE_AUTH || currentEmployee?.role==='admin'
+  const isBoss=currentEmployee?.role==='admin'
   async function resetPerformanceOverdue() {
     if(!isBoss) return
     if(!window.confirm('確定要重置逾期績效起算日嗎？重置後，先前累積的逾期天數不再列入績效統計。')) return
