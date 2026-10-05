@@ -1,6 +1,7 @@
 name: Update XLSX lockfile
 on:
-  workflow_dispatch:
+  push:
+    branches: [xlsx-import-export-v8]
 permissions:
   contents: write
 jobs:
