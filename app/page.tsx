@@ -50,6 +50,7 @@ export default function Home() {
   const [productSheets, setProductSheets] = useState<any[]>([])
   const [strategyItems, setStrategyItems] = useState<any[]>([])
   const [performanceResetAt,setPerformanceResetAt]=useState<string|null>(null)
+  const [strategyDefaults,setStrategyDefaults]=useState<{start_offset:number;due_offset:number;assignee_id:number|null}>({start_offset:-60,due_offset:-30,assignee_id:null})
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'dashboard'|'employees'|'template'>('dashboard')
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null)
@@ -106,7 +107,7 @@ export default function Home() {
       supabase.from('execution_template_defaults').select('*').order('task_title'),
       supabase.from('product_data_sheets').select('project_id,completed,updated_at,public_specs'),
       supabase.from('strategy_items').select('project_id,source_status'),
-      supabase.from('app_settings').select('key,value').eq('key','performance_reset').maybeSingle(),
+      supabase.from('app_settings').select('key,value').in('key',['performance_reset','strategy_defaults']),
     ])
     const err = p.error || s.error || t.error || g.error || e.error || xs.error || xt.error || xd.error || ps.error || si.error
     if (err) console.error(err)
@@ -120,7 +121,12 @@ export default function Home() {
     if (!xd.error) setTemplateDefaults((xd.data||[]) as ExecutionTemplateDefault[])
     if (!ps.error) setProductSheets(ps.data||[])
     if (!si.error) setStrategyItems(si.data||[])
-    if (!settings.error) setPerformanceResetAt((settings.data?.value as any)?.reset_at||null)
+    if (!settings.error) {
+      const rows=(settings.data||[]) as any[]
+      setPerformanceResetAt(rows.find(x=>x.key==='performance_reset')?.value?.reset_at||null)
+      const sd=rows.find(x=>x.key==='strategy_defaults')?.value
+      if(sd) setStrategyDefaults({start_offset:Number(sd.start_offset??-60),due_offset:Number(sd.due_offset??-30),assignee_id:sd.assignee_id?Number(sd.assignee_id):null})
+    }
     setLoading(false)
   }
 
@@ -306,7 +312,9 @@ export default function Home() {
   async function createProject() {
     if(!newProject.name.trim()) return alert('請輸入專案名稱')
     const ownerId = newProject.owner_id ? Number(newProject.owner_id) : null
+    const strategyFields=newProject.project_kind==='brand'&&newProject.launch_date?{strategy_start_date:addDays(newProject.launch_date,strategyDefaults.start_offset),strategy_due_date:addDays(newProject.launch_date,strategyDefaults.due_offset),strategy_assignee_id:strategyDefaults.assignee_id}:newProject.project_kind==='brand'?{strategy_assignee_id:strategyDefaults.assignee_id}:{}
     const {data:project,error}=await supabase.from('projects').insert({
+      ...strategyFields,
       name:newProject.name.trim(), version:newProject.version||null, owner_id:ownerId,
       launch_date:newProject.launch_date||null,
       retail_price:newProject.retail_price?Number(newProject.retail_price):null,
@@ -395,6 +403,13 @@ export default function Home() {
   async function deleteBrandTemplateItem(templateKey:string,title:string) {
     if(!confirm(`確定從模板刪除「${title}」？\n\n只影響之後新建立的專案，既有專案不會變動。`))return
     await saveTemplateDefault(templateKey,{project_kind:'brand',archived:true,enabled:false})
+  }
+
+  async function saveStrategyDefaults(patch:Partial<{start_offset:number;due_offset:number;assignee_id:number|null}>) {
+    const next={...strategyDefaults,...patch}
+    const {error}=await supabase.from('app_settings').upsert({key:'strategy_defaults',value:next,updated_at:new Date().toISOString()},{onConflict:'key'})
+    if(error)return alert('策略預設設定儲存失敗：'+error.message)
+    setStrategyDefaults(next)
   }
 
   async function add1688TemplateItem() {
@@ -561,7 +576,7 @@ export default function Home() {
   if(loading) return <Loading />
   if(REQUIRE_AUTH && session && !currentEmployee) return <AccessDeniedScreen email={session.user.email||''} />
   if(view==='employees') return <EmployeeView employees={employees} onBack={()=>setView('dashboard')} onAdd={addEmployee} onUpdate={updateEmployee} />
-  if(view==='template') return <TemplateSettingsView employees={employees} defaults={templateDefaults} onBack={()=>setView('dashboard')} onSave={saveTemplateDefault} onAdd1688={add1688TemplateItem} onDelete1688={delete1688TemplateItem} onAddBrand={addBrandTemplateItem} onDeleteBrand={deleteBrandTemplateItem} />
+  if(view==='template') return <TemplateSettingsView employees={employees} defaults={templateDefaults} onBack={()=>setView('dashboard')} onSave={saveTemplateDefault} onAdd1688={add1688TemplateItem} onDelete1688={delete1688TemplateItem} onAddBrand={addBrandTemplateItem} onDeleteBrand={deleteBrandTemplateItem} strategyDefaults={strategyDefaults} onSaveStrategyDefaults={saveStrategyDefaults} />
   if(selectedProject) return <ProjectView project={selectedProject} stages={projectStages} tasks={projectTasks} gates={projectGates} executionSections={projectExecutionSections} executionTasks={projectExecutionTasks} employees={employees} expanded={expanded} setExpanded={setExpanded} focusTask={focusTask} onBack={closeProject} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateStage={updateStage} onToggleGate={toggleGate} onAddTask={addTask} onDeleteTask={deleteTask} onDeleteProject={deleteProject} onCreateExecutionTemplate={()=>createExecutionTemplate(selectedProject)} onUpdateExecutionTask={updateExecutionTask} onAddExecutionTask={addExecutionTask} onDeleteExecutionTask={deleteExecutionTask} onRescheduleExecution={()=>rescheduleExecution(selectedProject)} onChangeProjectImage={changeProjectImage} />
 
   return <main className="page"><div className="shell">
@@ -735,11 +750,12 @@ function offsetPhase(value:number|null|undefined) { return (value??0) > 0 ? 'aft
 function offsetDays(value:number|null|undefined) { return Math.abs(Number(value??0)) }
 function makeOffset(phase:string, days:number) { return phase==='after' ? Math.abs(days) : -Math.abs(days) }
 
-function TemplateSettingsView({employees,defaults,onBack,onSave,onAdd1688,onDelete1688,onAddBrand,onDeleteBrand}:{employees:Employee[];defaults:ExecutionTemplateDefault[];onBack:()=>void;onSave:(key:string,p:Partial<ExecutionTemplateDefault>&Record<string,unknown>)=>void;onAdd1688:()=>void;onDelete1688:(title:string)=>void;onAddBrand:(section:string)=>void;onDeleteBrand:(key:string,title:string)=>void}) {
+function TemplateSettingsView({employees,defaults,onBack,onSave,onAdd1688,onDelete1688,onAddBrand,onDeleteBrand,strategyDefaults,onSaveStrategyDefaults}:{employees:Employee[];defaults:ExecutionTemplateDefault[];onBack:()=>void;onSave:(key:string,p:Partial<ExecutionTemplateDefault>&Record<string,unknown>)=>void;onAdd1688:()=>void;onDelete1688:(title:string)=>void;onAddBrand:(section:string)=>void;onDeleteBrand:(key:string,title:string)=>void;strategyDefaults:{start_offset:number;due_offset:number;assignee_id:number|null};onSaveStrategyDefaults:(p:Partial<{start_offset:number;due_offset:number;assignee_id:number|null}>)=>void}) {
   const [kind,setKind]=useState<'brand'|'1688'>('brand')
   function preset(key:string, priority:string, startOffset:number|null=null, dueOffset:number|null=null){ return (defaults as any[]).find(d=>(d.template_key||d.task_title)===key&&((d.project_kind||'brand')===kind)) || {template_key:key,task_title:key,project_kind:kind,default_assignee_id:null,default_reviewer_id:null,default_priority:priority,default_start_offset:startOffset,default_due_offset:dueOffset,enabled:true,archived:false} }
   const list1688=(defaults as any[]).filter(d=>(d.project_kind||'brand')==='1688').sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
   return <main className="page"><div className="shell"><Header/><div className="page-title-row"><div><h1>新品執行模板設定</h1><p>設定之後新建立專案時要自動產生的工作項目、預設負責人，以及依上市日自動排程的開始／完成時間。</p></div><button className="btn" onClick={onBack}>← 返回首頁</button></div>
+    <section className="panel" style={{marginBottom:16}}><div className="panel-head"><div><b>新品策略預設設定</b><p style={{margin:'6px 0 0',color:'#6b7280'}}>新建 GUXON 品牌新品時，依上市日 D0 自動建立策略時程；建立後仍可在個別專案修改。</p></div></div><div className="meta-grid"><Field label="策略開始"><div style={{display:'flex',gap:8,alignItems:'center'}}><span>上市前</span><input type="number" min="0" value={Math.abs(strategyDefaults.start_offset)} onChange={e=>onSaveStrategyDefaults({start_offset:-Math.abs(Number(e.target.value)||0)})}/><span>天</span></div></Field><Field label="策略完成"><div style={{display:'flex',gap:8,alignItems:'center'}}><span>上市前</span><input type="number" min="0" value={Math.abs(strategyDefaults.due_offset)} onChange={e=>onSaveStrategyDefaults({due_offset:-Math.abs(Number(e.target.value)||0)})}/><span>天</span></div></Field><Field label="預設負責人"><select value={strategyDefaults.assignee_id??''} onChange={e=>onSaveStrategyDefaults({assignee_id:e.target.value?Number(e.target.value):null})}><option value="">未指定</option>{employees.filter(e=>e.active).map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select></Field></div></section>
     <div className="kind-choice" style={{marginBottom:16}}><button className={kind==='brand'?'active':''} onClick={()=>setKind('brand')}><b>GUXON 品牌新品</b><small>完整新品執行模板</small></button><button className={kind==='1688'?'active':''} onClick={()=>setKind('1688')}><b>1688 新品</b><small>簡化上架模板，可自由新增項目</small></button></div>
     <div className="template-settings-note">這裡只影響「之後新建立的專案」。開始／完成時間以上市日 D0 自動換算；既有專案不會被模板設定覆蓋。</div>
     {kind==='brand'?<div className="template-settings">{EXECUTION_TEMPLATE.map((section,si)=>{
