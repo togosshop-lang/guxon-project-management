@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/src/lib/supabase'
+import * as XLSX from 'xlsx'
 
 type Props={projectId:number;projectName:string;model?:string|null}
 
@@ -30,27 +31,65 @@ export default function ProductDataPanel({projectId,projectName,model}:Props){
    const {error}=await supabase.from('product_data_sheets').upsert({project_id:projectId,public_specs:normalized,internal_analysis:internal,completed:forceCompleted,completed_at:forceCompleted?now:null,updated_at:now},{onConflict:'project_id'})
    setSaving(false);if(error)return alert('儲存失敗：'+error.message);setSpec(normalized);setCompleted(forceCompleted);alert(forceCompleted?'產品資料表已標記完成。':'產品資料表已儲存。')
  }
- function buildPublicRows(){
-   const esc=(v:any)=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
-   let rows='<tr><th colspan="3">規格紀錄表</th></tr>'
-   for(const section of SECTIONS){rows+=`<tr><th colspan="3">${esc(section.title)}</th></tr>`;for(const [k,l] of section.fields)rows+=`<tr><td>${esc(l)}</td><td colspan="2">${esc(spec[k])}</td></tr>`;if(section.title.startsWith('二、')){rows+='<tr><th colspan="3">三、特色重點說明</th></tr><tr><th>編號</th><th colspan="2">特色重點說明</th></tr>'+features.map((x:any,i:number)=>`<tr><td>${i+1}</td><td colspan="2">${esc(x.description)}</td></tr>`).join('')}}
-   rows+='<tr><th colspan="3">五、常見問題（FAQ）</th></tr><tr><th>編號</th><th>問題</th><th>回答</th></tr>'+faqs.map((x:any,i:number)=>`<tr><td>${i+1}</td><td>${esc(x.question)}</td><td>${esc(x.answer)}</td></tr>`).join('')
-   rows+='<tr><th colspan="3">六、國際條碼</th></tr><tr><th>編號</th><th>規格/顏色</th><th>國際條碼</th></tr>'+barcodes.map((x:any,i:number)=>`<tr><td>${i+1}</td><td>${esc(x.variant)}</td><td>${esc(x.barcode)}</td></tr>`).join('')
-   return {rows,esc}
+ function publicRows(){
+   const rows:(string|number)[][]=[['規格紀錄表','','']]
+   for(const section of SECTIONS){
+     rows.push([section.title,'',''])
+     for(const [k,l] of section.fields) rows.push([l,String(spec[k]??''),''])
+     if(section.title.startsWith('二、')){
+       rows.push(['三、特色重點說明','',''],['編號','特色重點說明',''])
+       features.forEach((x:any,i:number)=>rows.push([i+1,String(x.description??''),'']))
+     }
+   }
+   rows.push(['五、常見問題（FAQ）','',''],['編號','問題','回答'])
+   faqs.forEach((x:any,i:number)=>rows.push([i+1,String(x.question??''),String(x.answer??'')]))
+   rows.push(['六、國際條碼','',''],['編號','規格／顏色','國際條碼'])
+   barcodes.forEach((x:any,i:number)=>rows.push([i+1,String(x.variant??''),String(x.barcode??'')]))
+   return rows
  }
- function downloadExcel(rows:string,fileName:string){
-   const html=`<html><head><meta charset="utf-8"></head><body><table border="1">${rows}</table></body></html>`
-   const url=URL.createObjectURL(new Blob([html],{type:'application/vnd.ms-excel;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download=fileName;a.click();URL.revokeObjectURL(url)
+ function downloadXlsx(rows:(string|number)[][],fileName:string){
+   const ws=XLSX.utils.aoa_to_sheet(rows)
+   ws['!cols']=[{wch:28},{wch:48},{wch:48}]
+   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'產品資料表')
+   XLSX.writeFile(wb,fileName)
  }
- function exportExcel(){
-   const {rows}=buildPublicRows()
-   downloadExcel(rows,`${projectName}_客服規格表.xls`)
- }
+ function exportExcel(){downloadXlsx(publicRows(),`${projectName}_客服規格表.xlsx`)}
  function exportFullExcel(){
-   const {rows:publicRows,esc}=buildPublicRows()
-   let rows=publicRows+'<tr><th colspan="3">內部分析資料（機密）</th></tr>'
-   for(const [k,l] of INTERNAL) rows+=`<tr><td>${esc(l)}</td><td colspan="2">${esc(internal[k])}</td></tr>`
-   downloadExcel(rows,`${projectName}_完整產品資料表_內部分析.xls`)
+   const rows=publicRows()
+   rows.push(['內部分析資料（機密）','',''])
+   for(const [k,l] of INTERNAL) rows.push([l,String(internal[k]??''),''])
+   downloadXlsx(rows,`${projectName}_完整產品資料表_內部分析.xlsx`)
+ }
+ async function importExcel(file:File){
+   try{
+     const data=await file.arrayBuffer(),wb=XLSX.read(data,{type:'array'}),ws=wb.Sheets[wb.SheetNames[0]]
+     const rows=XLSX.utils.sheet_to_json<any[]>(ws,{header:1,defval:''})
+     const nextSpec={...spec},nextInternal={...internal},nextFeatures:Row[]=[],nextFaqs:Row[]=[],nextBarcodes:Row[]=[]
+     const scalarMap=new Map<string,string>();SECTIONS.forEach(section=>section.fields.forEach(([k,l])=>scalarMap.set(l,k)))
+     const internalMap=new Map<string,string>();INTERNAL.forEach(([k,l])=>internalMap.set(l,k))
+     let mode=''
+     for(const raw of rows){
+       const a=String(raw[0]??'').trim(),b=String(raw[1]??''),c=String(raw[2]??'')
+       if(a==='三、特色重點說明'){mode='features';continue}
+       if(a==='五、常見問題（FAQ）'){mode='faq';continue}
+       if(a==='六、國際條碼'){mode='barcode';continue}
+       if(a==='內部分析資料（機密）'){mode='internal';continue}
+       if(a.startsWith('一、')||a.startsWith('二、')||a.startsWith('四、')){mode='scalar';continue}
+       const key=scalarMap.get(a);if(key){nextSpec[key]=b;continue}
+       const ik=internalMap.get(a);if(ik){nextInternal[ik]=b;continue}
+       if(a==='編號')continue
+       if(/^\d+$/.test(a)){
+         if(mode==='features')nextFeatures.push({id:uid(),description:b})
+         else if(mode==='faq')nextFaqs.push({id:uid(),question:b,answer:c})
+         else if(mode==='barcode')nextBarcodes.push({id:uid(),variant:b,barcode:c})
+       }
+     }
+     if(nextFeatures.length)nextSpec.features_list=nextFeatures
+     if(nextFaqs.length)nextSpec.faqs=nextFaqs
+     if(nextBarcodes.length)nextSpec.barcodes=nextBarcodes
+     setSpec(nextSpec);setInternal(nextInternal)
+     alert('Excel 已匯入表單。請先檢查內容，確認後再按「儲存產品資料表」。')
+   }catch(err:any){alert('Excel 匯入失敗：'+(err?.message||'無法解析檔案'))}
  }
  const listEditor=(key:string,list:any[],cols:[string,string][]) => <div className="product-list"><div className="product-list-head">{cols.map(c=><b key={c[0]}>{c[1]}</b>)}</div>{list.map((row,i)=><div className="product-list-row" key={row.id||i}>{cols.map(([k])=><textarea key={k} value={row[k]||''} onChange={e=>{const next=list.map((x,j)=>j===i?{...x,[k]:e.target.value}:x);setList(key,next)}}/>)}<button className="text-danger" onClick={()=>setList(key,list.filter((_,j)=>j!==i))}>刪除</button></div>)}<button className="btn" onClick={()=>setList(key,[...list,{id:uid()}])}>＋ 新增一列</button></div>
  return <section className="product-data-panel">
@@ -61,7 +100,7 @@ export default function ProductDataPanel({projectId,projectName,model}:Props){
      <div className="product-data-section"><h3>五、常見問題（FAQ）</h3>{listEditor('faqs',faqs,[['question','問題'],['answer','回答']])}</div>
      <div className="product-data-section"><h3>六、國際條碼</h3>{listEditor('barcodes',barcodes,[['variant','規格／顏色'],['barcode','國際條碼']])}</div>
      <div className="product-data-section internal"><h3>內部分析資料 🔒 <small>不匯出至客服規格表</small></h3><div className="product-data-grid">{INTERNAL.map(([k,l])=><label key={k}><b>{l}</b><textarea value={internal[k]||''} onChange={e=>setInternal(s=>({...s,[k]:e.target.value}))}/></label>)}</div></div>
-     <div className="product-data-actions"><label><input type="checkbox" checked={completed} onChange={e=>setCompleted(e.target.checked)}/> 產品資料表已完成</label><div><button className="btn" onClick={exportExcel}>匯出客服規格表 Excel</button><button className="btn" onClick={exportFullExcel}>匯出完整產品資料表 Excel</button><button className="btn-primary" disabled={saving} onClick={()=>save()}>{saving?'儲存中…':'儲存產品資料表'}</button></div></div>
+     <div className="product-data-actions"><label><input type="checkbox" checked={completed} onChange={e=>setCompleted(e.target.checked)}/> 產品資料表已完成</label><div><label className="btn" style={{cursor:'pointer'}}>匯入產品資料 Excel<input type="file" accept=".xlsx,.xls" style={{display:'none'}} onChange={e=>{const file=e.target.files?.[0];if(file)importExcel(file);e.currentTarget.value=''}}/></label><button className="btn" onClick={exportExcel}>匯出客服規格表 Excel</button><button className="btn" onClick={exportFullExcel}>匯出完整產品資料表 Excel</button><button className="btn-primary" disabled={saving} onClick={()=>save()}>{saving?'儲存中…':'儲存產品資料表'}</button></div></div>
    </div>}
  </section>
 }
