@@ -577,7 +577,7 @@ export default function Home() {
   if(REQUIRE_AUTH && session && !currentEmployee) return <AccessDeniedScreen email={session.user.email||''} />
   if(view==='employees') return <EmployeeView employees={employees} onBack={()=>setView('dashboard')} onAdd={addEmployee} onUpdate={updateEmployee} />
   if(view==='template') return <TemplateSettingsView employees={employees} defaults={templateDefaults} onBack={()=>setView('dashboard')} onSave={saveTemplateDefault} onAdd1688={add1688TemplateItem} onDelete1688={delete1688TemplateItem} onAddBrand={addBrandTemplateItem} onDeleteBrand={deleteBrandTemplateItem} strategyDefaults={strategyDefaults} onSaveStrategyDefaults={saveStrategyDefaults} />
-  if(selectedProject) return <ProjectView project={selectedProject} stages={projectStages} tasks={projectTasks} gates={projectGates} executionSections={projectExecutionSections} executionTasks={projectExecutionTasks} employees={employees} expanded={expanded} setExpanded={setExpanded} focusTask={focusTask} onBack={closeProject} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateStage={updateStage} onToggleGate={toggleGate} onAddTask={addTask} onDeleteTask={deleteTask} onDeleteProject={deleteProject} onCreateExecutionTemplate={()=>createExecutionTemplate(selectedProject)} onUpdateExecutionTask={updateExecutionTask} onAddExecutionTask={addExecutionTask} onDeleteExecutionTask={deleteExecutionTask} onRescheduleExecution={()=>rescheduleExecution(selectedProject)} onChangeProjectImage={changeProjectImage} />
+  if(selectedProject) return <ProjectView project={selectedProject} stages={projectStages} tasks={projectTasks} gates={projectGates} executionSections={projectExecutionSections} executionTasks={projectExecutionTasks} employees={employees} currentEmployeeId={currentEmployee?.id??null} isManager={isManager} expanded={expanded} setExpanded={setExpanded} focusTask={focusTask} onBack={closeProject} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateStage={updateStage} onToggleGate={toggleGate} onAddTask={addTask} onDeleteTask={deleteTask} onDeleteProject={deleteProject} onCreateExecutionTemplate={()=>createExecutionTemplate(selectedProject)} onUpdateExecutionTask={updateExecutionTask} onAddExecutionTask={addExecutionTask} onDeleteExecutionTask={deleteExecutionTask} onRescheduleExecution={()=>rescheduleExecution(selectedProject)} onChangeProjectImage={changeProjectImage} />
 
   return <main className="page"><div className="shell">
     <Header right={REQUIRE_AUTH&&session?<div className="login-user"><span><b>{currentEmployee?.name||session.user.email}</b><small>{currentEmployee?.role||''}</small></span><button className="btn" onClick={()=>supabase.auth.signOut()}>登出</button></div>:null}/>
@@ -615,6 +615,7 @@ export default function Home() {
 
 type ProjectViewProps = {
   project:Project; stages:Stage[]; tasks:Task[]; gates:StageGate[]; executionSections:ExecutionSection[]; executionTasks:ExecutionTask[]; employees:Employee[];
+  currentEmployeeId:number|null; isManager:boolean;
   expanded:Record<number,boolean>; setExpanded:(v:Record<number,boolean>|((c:Record<number,boolean>)=>Record<number,boolean>))=>void;
   focusTask:{source:'策略'|'執行';id:number;project_id:number;container_id:number|null}|null;
   onBack:()=>void; onUpdateProject:(id:number,p:Partial<Project>)=>void; onUpdateTask:(id:number,p:Partial<Task>)=>void;
@@ -690,12 +691,14 @@ function Simple1688ProjectView(props:ProjectViewProps) {
 
 function ExecutionProjectView(props:ProjectViewProps & {onOpenStrategy:()=>void}) {
   const {project,executionSections:sections,executionTasks:tasks,employees}=props
+  const [taskView,setTaskView]=useState<'mine'|'all'>(()=>props.isManager?'all':'mine')
+  const visibleTasks=taskView==='all'?tasks:tasks.filter(t=>props.currentEmployeeId!==null&&t.assignee_id===props.currentEmployeeId)
   const [expandedExec,setExpandedExec]=useState<Record<number,boolean>>(()=>props.focusTask?.source==='執行'&&props.focusTask.container_id?{[props.focusTask.container_id]:true}:sections[0]?{[sections[0].id]:true}:{})
   useEffect(()=>{
     if(props.focusTask?.source==='執行'&&props.focusTask.container_id) setExpandedExec(c=>({...c,[props.focusTask!.container_id!]:true}))
   },[props.focusTask])
-  const sectionTasks=(sectionId:number)=>tasks.filter(t=>t.section_id===sectionId)
-  const activeTasks=tasks.filter(t=>countsInExecutionProgress(t.status))
+  const sectionTasks=(sectionId:number)=>visibleTasks.filter(t=>t.section_id===sectionId)
+  const activeTasks=visibleTasks.filter(t=>countsInExecutionProgress(t.status))
   const completed=activeTasks.filter(t=>isDone(t.status)).length
   const overall=activeTasks.length?Math.round(completed/activeTasks.length*100):0
   const overdue=activeTasks.filter(t=>t.due_date&&t.due_date<todayIso()&&!isDone(t.status))
@@ -720,16 +723,17 @@ function ExecutionProjectView(props:ProjectViewProps & {onOpenStrategy:()=>void}
     <ProjectModuleTabs active="execution" onStrategy={props.onOpenStrategy} onExecution={()=>{}}/>
     <div className="toolbar"><button className="btn" onClick={props.onBack}>← 返回專案列表</button><button className="btn" onClick={()=>setExpandedExec(Object.fromEntries(sections.map(s=>[s.id,true])))}>展開全部</button><button className="btn" onClick={()=>setExpandedExec({})}>收合全部</button><button className="btn" onClick={()=>window.print()}>列印／存 PDF</button>{sections.length?<button className="btn" onClick={props.onRescheduleExecution}>依上市日重新排程</button>:null}</div>
 
+    <div className="toolbar"><span>任務檢視：</span><button type="button" className={taskView==='mine'?'btn-primary':'btn'} onClick={()=>setTaskView('mine')}>只看我的任務</button><button type="button" className={taskView==='all'?'btn-primary':'btn'} onClick={()=>setTaskView('all')}>查看全部任務</button></div>
     <section className="execution-hero"><div><span>新品執行管理</span><h1>{project.name}</h1><p>{project.version||'-'} ・ 上市日 {project.launch_date||'尚未設定'} ・ 68 項標準跨部門工作流程</p></div><strong>{overall}%</strong></section>
     <section className="execution-project-info"><span>負責人 <b>{employees.find(e=>e.id===project.owner_id)?.name||'未指派'}</b></span><span>正式價 <b>NT$ {project.retail_price??'-'}</b></span><span>團購／活動價 <b>NT$ {project.group_price??'-'}</b></span><span>策略期限 <b>{(project as any).strategy_due_date||'-'}</b></span>{(project as any).product_url&&<a href={(project as any).product_url} target="_blank" rel="noreferrer">開啟產品資料 ↗</a>}</section>
 
     {!sections.length?<div className="empty execution-empty"><h2>尚未建立新品執行模板</h2><p>建立後會自動產生 9 大工作區、{EXECUTION_TASK_COUNT} 個標準工作項目，並依上市日排定開始日與截止日。</p><button className="btn-primary" onClick={props.onCreateExecutionTemplate}>建立新品執行模板</button></div>:<>
-      <div className="stats execution-stats"><Stat label="執行工作" value={tasks.length}/><Stat label="已完成" value={completed}/><Stat label="7 天內到期" value={dueSoon.length} danger={dueSoon.length>0}/><Stat label="逾期／卡關" value={overdue.length+blocked.length} danger={overdue.length+blocked.length>0}/></div>
-      <section className="overall"><div><b>新品執行進度</b><p>{completed}/{activeTasks.length} 項適用工作完成 ・ {tasks.filter(t=>t.status==='不適用').length} 項不適用</p></div><strong>{overall}%</strong><div className="overall-bar"><i style={{width:`${overall}%`}}/></div></section>
+      <div className="stats execution-stats"><Stat label="執行工作" value={visibleTasks.length}/><Stat label="已完成" value={completed}/><Stat label="7 天內到期" value={dueSoon.length} danger={dueSoon.length>0}/><Stat label="逾期／卡關" value={overdue.length+blocked.length} danger={overdue.length+blocked.length>0}/></div>
+      <section className="overall"><div><b>新品執行進度</b><p>{completed}/{activeTasks.length} 項適用工作完成 ・ {visibleTasks.filter(t=>t.status==='不適用').length} 項不適用</p></div><strong>{overall}%</strong><div className="overall-bar"><i style={{width:`${overall}%`}}/></div></section>
       {(overdue.length||blocked.length||dueSoon.length)?<div className="execution-alerts"><ExecutionAttention title="逾期" items={overdue} employees={employees}/><ExecutionAttention title="7 天內到期" items={dueSoon} employees={employees}/><ExecutionAttention title="卡關" items={blocked} employees={employees}/></div>:<div className="alert ok"><b>目前沒有執行異常</b><p>沒有逾期或卡關工作。</p></div>}
-      <div className="execution-section-cards">{sections.map(section=><button key={section.id} className={`execution-mini state-${sectionState(section.id)}`} onClick={()=>setExpandedExec(c=>({...c,[section.id]:true}))}><small>WORK {section.section_number}</small><b>{section.name}</b><div className="mini-progress"><i style={{width:`${sectionProgress(section.id)}%`}}/></div><span>{sectionTasks(section.id).filter(t=>isDone(t.status)).length}/{sectionTasks(section.id).filter(t=>countsInExecutionProgress(t.status)).length} ・ {sectionProgress(section.id)}%</span></button>)}</div>
+      <div className="execution-section-cards">{sections.filter(section=>taskView==='all'||sectionTasks(section.id).length>0).map(section=><button key={section.id} className={`execution-mini state-${sectionState(section.id)}`} onClick={()=>setExpandedExec(c=>({...c,[section.id]:true}))}><small>WORK {section.section_number}</small><b>{section.name}</b><div className="mini-progress"><i style={{width:`${sectionProgress(section.id)}%`}}/></div><span>{sectionTasks(section.id).filter(t=>isDone(t.status)).length}/{sectionTasks(section.id).filter(t=>countsInExecutionProgress(t.status)).length} ・ {sectionProgress(section.id)}%</span></button>)}</div>
 
-      <div className="execution-sections">{sections.map(section=>{
+      <div className="execution-sections">{sections.filter(section=>taskView==='all'||sectionTasks(section.id).length>0).map(section=>{
         const list=sectionTasks(section.id), open=!!expandedExec[section.id], state=sectionState(section.id), progress=sectionProgress(section.id)
         return <section key={section.id} className={`stage execution-section state-${state}`}><button className="stage-head" onClick={()=>setExpandedExec(c=>({...c,[section.id]:!open}))}><span className="stage-num">{section.section_number}</span><span className="stage-main"><b>{section.name}</b><small>{section.description||''}</small></span><StatusPill text={`${state} ${progress}%`}/><span>{open?'▲':'▼'}</span></button>{open&&<div className="stage-body"><div className="section-title"><b>執行工作項目</b><button onClick={()=>props.onAddExecutionTask(section.id)}>＋ 新增工作項目</button></div><div className="table-wrap"><table className="execution-table"><thead><tr><th>工作項目</th><th>負責</th><th>審核</th><th>開始</th><th>截止</th><th>優先</th><th>狀態</th><th>前置任務</th><th>備註／連結</th><th></th></tr></thead><tbody>{list.map(task=>{
           const dep=dependency(task); const depBlocked=dependencyBlocked(task)
