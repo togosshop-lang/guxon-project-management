@@ -18,6 +18,17 @@ const arr=(v:any,defaults:number)=>Array.isArray(v)&&v.length?v:Array.from({leng
 
 export default function ProductDataPanel({projectId,projectName,model}:Props){
  const [open,setOpen]=useState(false),[saving,setSaving]=useState(false),[completed,setCompleted]=useState(false)
+ const openStorageKey=`guxon-product-data-open-${projectId}`
+ useEffect(()=>{
+   try{setOpen(window.sessionStorage.getItem(openStorageKey)==='true')}catch{setOpen(false)}
+ },[openStorageKey])
+ function toggleOpen(){
+   setOpen(previous=>{
+     const next=!previous
+     try{window.sessionStorage.setItem(openStorageKey,String(next))}catch{}
+     return next
+   })
+ }
  const [spec,setSpec]=useState<Record<string,any>>({}),[internal,setInternal]=useState<Record<string,string>>({})
  useEffect(()=>{(async()=>{const {data}=await supabase.from('product_data_sheets').select('*').eq('project_id',projectId).maybeSingle();if(data){setSpec(data.public_specs||{});setInternal(data.internal_analysis||{});setCompleted(!!data.completed)}else setSpec({product_name:projectName,model:model||''})})()},[projectId])
  const features=arr(spec.features_list,5),faqs=arr(spec.faqs,5),barcodes=arr(spec.barcodes,4)
@@ -93,7 +104,7 @@ export default function ProductDataPanel({projectId,projectName,model}:Props){
  }
  const listEditor=(key:string,list:any[],cols:[string,string][]) => <div className="product-list"><div className="product-list-head">{cols.map(c=><b key={c[0]}>{c[1]}</b>)}</div>{list.map((row,i)=><div className="product-list-row" key={row.id||i}>{cols.map(([k])=><textarea key={k} value={row[k]||''} onChange={e=>{const next=list.map((x,j)=>j===i?{...x,[k]:e.target.value}:x);setList(key,next)}}/>)}<button className="text-danger" onClick={()=>setList(key,list.filter((_,j)=>j!==i))}>刪除</button></div>)}<button className="btn" onClick={()=>setList(key,[...list,{id:uid()}])}>＋ 新增一列</button></div>
  return <section className="product-data-panel">
-   <button className="product-data-head" onClick={()=>setOpen(v=>!v)}><div><small>PRODUCT DATA</small><b>產品資料表</b><span>依公司規格紀錄表集中維護，AI 策略直接引用</span></div><div className="product-data-status"><strong>{completed?'✓ 已完成':`${progress}%`}</strong><span>{open?'收合':'展開'}</span></div></button>
+   <button className="product-data-head" onClick={toggleOpen}><div><small>PRODUCT DATA</small><b>產品資料表</b><span>依公司規格紀錄表集中維護，AI 策略直接引用</span></div><div className="product-data-status"><strong>{completed?'✓ 已完成':`${progress}%`}</strong><span>{open?'收合':'展開'}</span></div></button>
    {open&&<div className="product-data-body">
      <div className="product-progress"><i style={{width:`${progress}%`}}/><span>資料完成度 {progress}%</span></div>
      {SECTIONS.map(section=><div className="product-data-section" key={section.title}><h3>{section.title}</h3><div className="product-data-grid">{section.fields.map(([k,l])=><label key={k}><b>{l}</b><textarea value={spec[k]||''} onChange={e=>setSpec(s=>({...s,[k]:e.target.value}))}/></label>)}</div>{section.title.startsWith('二、')&&<><h3>三、特色重點說明</h3>{listEditor('features_list',features,[['description','特色重點說明']])}</>}</div>)}
