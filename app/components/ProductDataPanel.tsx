@@ -23,26 +23,30 @@ export default function ProductDataPanel({projectId,projectName,model}:Props){
  const lastWindowScroll=useRef<number|null>(null)
  useEffect(()=>{
    if(!open){lastWindowScroll.current=null;return}
-   let restoreTimer:ReturnType<typeof setTimeout>|null=null
-   const remember=()=>{lastWindowScroll.current=window.scrollY}
+   let returning=false
+   let timers:ReturnType<typeof setTimeout>[]=[]
+   const remember=()=>{if(!returning)lastWindowScroll.current=window.scrollY}
    const restore=()=>{
+     if(lastWindowScroll.current===null)return
+     returning=true
      const y=lastWindowScroll.current
-     if(y===null)return
-     window.requestAnimationFrame(()=>{
-       window.requestAnimationFrame(()=>window.scrollTo({top:y,behavior:'instant'}))
-     })
-     if(restoreTimer!==null)clearTimeout(restoreTimer)
-     restoreTimer=setTimeout(()=>window.scrollTo({top:y,behavior:'instant'}),120)
+     timers.forEach(clearTimeout)
+     timers=[0,80,250,600].map(delay=>setTimeout(()=>{
+       if(document.visibilityState==='visible')window.scrollTo(0,y)
+       if(delay===600)returning=false
+     },delay))
    }
    const onVisibility=()=>{if(document.visibilityState==='hidden')remember();else restore()}
+   window.addEventListener('scroll',remember,{passive:true})
    window.addEventListener('blur',remember)
    window.addEventListener('focus',restore)
    document.addEventListener('visibilitychange',onVisibility)
    return ()=>{
+     window.removeEventListener('scroll',remember)
      window.removeEventListener('blur',remember)
      window.removeEventListener('focus',restore)
      document.removeEventListener('visibilitychange',onVisibility)
-     if(restoreTimer!==null)clearTimeout(restoreTimer)
+     timers.forEach(clearTimeout)
    }
  },[open,projectId])
  const [spec,setSpec]=useState<Record<string,any>>({}),[internal,setInternal]=useState<Record<string,string>>({})
