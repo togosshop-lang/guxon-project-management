@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/src/lib/supabase'
 import * as XLSX from 'xlsx'
 
@@ -31,6 +31,31 @@ export default function ProductDataPanel({projectId,projectName,model}:Props){
    try{window.localStorage.setItem(storageKey,String(next))}catch{}
    setOpen(next)
  }
+ const lastWindowScroll=useRef<number|null>(null)
+ useEffect(()=>{
+   if(!open){lastWindowScroll.current=null;return}
+   let restoreTimer:ReturnType<typeof setTimeout>|null=null
+   const remember=()=>{lastWindowScroll.current=window.scrollY}
+   const restore=()=>{
+     const y=lastWindowScroll.current
+     if(y===null)return
+     window.requestAnimationFrame(()=>{
+       window.requestAnimationFrame(()=>window.scrollTo({top:y,behavior:'instant'}))
+     })
+     if(restoreTimer!==null)clearTimeout(restoreTimer)
+     restoreTimer=setTimeout(()=>window.scrollTo({top:y,behavior:'instant'}),120)
+   }
+   const onVisibility=()=>{if(document.visibilityState==='hidden')remember();else restore()}
+   window.addEventListener('blur',remember)
+   window.addEventListener('focus',restore)
+   document.addEventListener('visibilitychange',onVisibility)
+   return ()=>{
+     window.removeEventListener('blur',remember)
+     window.removeEventListener('focus',restore)
+     document.removeEventListener('visibilitychange',onVisibility)
+     if(restoreTimer!==null)clearTimeout(restoreTimer)
+   }
+ },[open,projectId])
  const [spec,setSpec]=useState<Record<string,any>>({}),[internal,setInternal]=useState<Record<string,string>>({})
  useEffect(()=>{(async()=>{const {data}=await supabase.from('product_data_sheets').select('*').eq('project_id',projectId).maybeSingle();if(data){setSpec(data.public_specs||{});setInternal(data.internal_analysis||{});setCompleted(!!data.completed)}else setSpec({product_name:projectName,model:model||''})})()},[projectId])
  const features=arr(spec.features_list,5),faqs=arr(spec.faqs,5),barcodes=arr(spec.barcodes,4)
