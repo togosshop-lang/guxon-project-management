@@ -92,7 +92,7 @@ export default function Home() {
       .on('postgres_changes', {event:'*',schema:'public',table:'execution_template_defaults'}, () => loadAll(false))
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [authReady, session])
+  }, [authReady, session?.user.id])
 
   async function loadAll(showLoading = true) {
     if (showLoading) setLoading(true)
