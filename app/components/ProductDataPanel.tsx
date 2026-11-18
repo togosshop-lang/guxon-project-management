@@ -17,20 +17,9 @@ const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36)
 const arr=(v:any,defaults:number)=>Array.isArray(v)&&v.length?v:Array.from({length:defaults},()=>({id:uid()}))
 
 export default function ProductDataPanel({projectId,projectName,model}:Props){
- const storageKey=`guxon-product-data-open-${projectId}`
- const [open,setOpen]=useState(()=>{
-   if(typeof window==='undefined')return false
-   try{return window.localStorage.getItem(`guxon-product-data-open-${projectId}`)==='true'}catch{return false}
- })
+ const [open,setOpen]=useState(false)
  const [saving,setSaving]=useState(false),[completed,setCompleted]=useState(false)
- useEffect(()=>{
-   try{setOpen(window.localStorage.getItem(storageKey)==='true')}catch{}
- },[storageKey])
- function toggleOpen(){
-   const next=!open
-   try{window.localStorage.setItem(storageKey,String(next))}catch{}
-   setOpen(next)
- }
+ function toggleOpen(){setOpen(previous=>!previous)}
  const lastWindowScroll=useRef<number|null>(null)
  useEffect(()=>{
    if(!open){lastWindowScroll.current=null;return}
