@@ -17,17 +17,19 @@ const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36)
 const arr=(v:any,defaults:number)=>Array.isArray(v)&&v.length?v:Array.from({length:defaults},()=>({id:uid()}))
 
 export default function ProductDataPanel({projectId,projectName,model}:Props){
- const [open,setOpen]=useState(false),[saving,setSaving]=useState(false),[completed,setCompleted]=useState(false)
- const openStorageKey=`guxon-product-data-open-${projectId}`
+ const storageKey=`guxon-product-data-open-${projectId}`
+ const [open,setOpen]=useState(()=>{
+   if(typeof window==='undefined')return false
+   try{return window.localStorage.getItem(`guxon-product-data-open-${projectId}`)==='true'}catch{return false}
+ })
+ const [saving,setSaving]=useState(false),[completed,setCompleted]=useState(false)
  useEffect(()=>{
-   try{setOpen(window.sessionStorage.getItem(openStorageKey)==='true')}catch{setOpen(false)}
- },[openStorageKey])
+   try{setOpen(window.localStorage.getItem(storageKey)==='true')}catch{}
+ },[storageKey])
  function toggleOpen(){
-   setOpen(previous=>{
-     const next=!previous
-     try{window.sessionStorage.setItem(openStorageKey,String(next))}catch{}
-     return next
-   })
+   const next=!open
+   try{window.localStorage.setItem(storageKey,String(next))}catch{}
+   setOpen(next)
  }
  const [spec,setSpec]=useState<Record<string,any>>({}),[internal,setInternal]=useState<Record<string,string>>({})
  useEffect(()=>{(async()=>{const {data}=await supabase.from('product_data_sheets').select('*').eq('project_id',projectId).maybeSingle();if(data){setSpec(data.public_specs||{});setInternal(data.internal_analysis||{});setCompleted(!!data.completed)}else setSpec({product_name:projectName,model:model||''})})()},[projectId])
